@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { stockApiService, type StockData } from "./services/stockApi"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,294 +10,81 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import StockChart from "./components/stock-chart"
 import StockList from "./components/stock-list"
 import AIBackground from "./components/ai-background"
-import { TrendingUp, TrendingDown, Activity, Brain, Globe, IndianRupee, DollarSign, AlertTriangle } from "lucide-react"
+import { TrendingUp, TrendingDown, Activity, Brain, Globe, IndianRupee, DollarSign, AlertTriangle, RefreshCw } from "lucide-react"
 
-interface Stock {
-  symbol: string
-  name: string
-  price: number
-  change: number
-  changePercent: number
-  market: "US" | "IN"
-  currency: string
+interface Stock extends StockData {
   predictedPrice?: number
   predictedChange?: number
 }
 
-const INITIAL_STOCKS: Stock[] = [
+const STOCK_SYMBOLS = [
   // US Stocks
-  {
-    symbol: "AAPL",
-    name: "Apple Inc.",
-    price: 175.43,
-    change: 2.15,
-    changePercent: 1.24,
-    market: "US",
-    currency: "USD",
-  },
-  {
-    symbol: "GOOGL",
-    name: "Alphabet Inc.",
-    price: 142.56,
-    change: -1.23,
-    changePercent: -0.85,
-    market: "US",
-    currency: "USD",
-  },
-  {
-    symbol: "MSFT",
-    name: "Microsoft Corp.",
-    price: 378.85,
-    change: 4.67,
-    changePercent: 1.25,
-    market: "US",
-    currency: "USD",
-  },
-  {
-    symbol: "TSLA",
-    name: "Tesla Inc.",
-    price: 248.42,
-    change: -3.21,
-    changePercent: -1.27,
-    market: "US",
-    currency: "USD",
-  },
-  {
-    symbol: "NVDA",
-    name: "NVIDIA Corporation",
-    price: 875.28,
-    change: 12.45,
-    changePercent: 1.44,
-    market: "US",
-    currency: "USD",
-  },
-  {
-    symbol: "AMZN",
-    name: "Amazon.com Inc.",
-    price: 155.89,
-    change: -2.34,
-    changePercent: -1.48,
-    market: "US",
-    currency: "USD",
-  },
-  {
-    symbol: "META",
-    name: "Meta Platforms Inc.",
-    price: 334.87,
-    change: 5.67,
-    changePercent: 1.72,
-    market: "US",
-    currency: "USD",
-  },
-  {
-    symbol: "NFLX",
-    name: "Netflix Inc.",
-    price: 487.23,
-    change: -8.45,
-    changePercent: -1.71,
-    market: "US",
-    currency: "USD",
-  },
+  "AAPL", "GOOGL", "MSFT", "TSLA", "NVDA", "AMZN", "META", "NFLX",
   // Indian Stocks
-  {
-    symbol: "RELIANCE",
-    name: "Reliance Industries Ltd",
-    price: 2456.75,
-    change: 15.3,
-    changePercent: 0.63,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "TCS",
-    name: "Tata Consultancy Services",
-    price: 3542.8,
-    change: -12.45,
-    changePercent: -0.35,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "INFY",
-    name: "Infosys Limited",
-    price: 1456.9,
-    change: 8.75,
-    changePercent: 0.6,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "HDFCBANK",
-    name: "HDFC Bank Limited",
-    price: 1678.25,
-    change: 22.1,
-    changePercent: 1.33,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "ICICIBANK",
-    name: "ICICI Bank Limited",
-    price: 1234.56,
-    change: -8.9,
-    changePercent: -0.71,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "SBIN",
-    name: "State Bank of India",
-    price: 567.89,
-    change: 4.32,
-    changePercent: 0.77,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "BHARTIARTL",
-    name: "Bharti Airtel Limited",
-    price: 1089.45,
-    change: 12.67,
-    changePercent: 1.18,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "ITC",
-    name: "ITC Limited",
-    price: 456.78,
-    change: -3.21,
-    changePercent: -0.7,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "LT",
-    name: "Larsen & Toubro Ltd",
-    price: 3456.12,
-    change: 23.45,
-    changePercent: 0.68,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "HCLTECH",
-    name: "HCL Technologies Ltd",
-    price: 1567.89,
-    change: 15.67,
-    changePercent: 1.01,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "WIPRO",
-    name: "Wipro Limited",
-    price: 567.34,
-    change: -4.56,
-    changePercent: -0.8,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "MARUTI",
-    name: "Maruti Suzuki India Ltd",
-    price: 10234.56,
-    change: 89.12,
-    changePercent: 0.88,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "ADANIPORTS",
-    name: "Adani Ports & SEZ Ltd",
-    price: 789.45,
-    change: 12.34,
-    changePercent: 1.59,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "ASIANPAINT",
-    name: "Asian Paints Limited",
-    price: 3234.67,
-    change: -45.23,
-    changePercent: -1.38,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "AXISBANK",
-    name: "Axis Bank Limited",
-    price: 1123.45,
-    change: 18.76,
-    changePercent: 1.7,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "BAJFINANCE",
-    name: "Bajaj Finance Limited",
-    price: 6789.12,
-    change: -89.45,
-    changePercent: -1.3,
-    market: "IN",
-    currency: "INR",
-  },
-  {
-    symbol: "KOTAKBANK",
-    name: "Kotak Mahindra Bank Ltd",
-    price: 1789.45,
-    change: -23.45,
-    changePercent: -1.29,
-    market: "IN",
-    currency: "INR",
-  },
+  "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
+  "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "LT.NS", "HCLTECH.NS",
+  "WIPRO.NS", "MARUTI.NS", "ADANIPORTS.NS", "ASIANPAINT.NS",
+  "AXISBANK.NS", "BAJFINANCE.NS", "KOTAKBANK.NS"
 ]
 
 export default function StockPredictor() {
-  const [stocks, setStocks] = useState<Stock[]>(INITIAL_STOCKS)
-  const [selectedStock, setSelectedStock] = useState<Stock>(INITIAL_STOCKS[0])
+  const [stocks, setStocks] = useState<Stock[]>([])
+  const [selectedStock, setSelectedStock] = useState<Stock | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [activeMarket, setActiveMarket] = useState<"ALL" | "US" | "IN">("ALL")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Enhanced real-time price simulation with more realistic movements
+  // Load initial stock data
+  useEffect(() => {
+    loadStockData()
+  }, [])
+
+  // Refresh data every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
-      setStocks((prevStocks) =>
-        prevStocks.map((stock) => {
-          // More realistic price movements based on market volatility
-          const baseVolatility = stock.market === "US" ? 0.015 : 0.02 // US stocks slightly less volatile
-          const volatility = (Math.random() - 0.5) * baseVolatility
-
-          // Add some momentum based on previous change
-          const momentum = stock.changePercent > 0 ? 0.3 : -0.3
-          const momentumFactor = (Math.random() - 0.5) * momentum * 0.001
-
-          const totalChange = volatility + momentumFactor
-          const newPrice = stock.price * (1 + totalChange)
-          const change = newPrice - stock.price
-          const changePercent = (change / stock.price) * 100
-
-          return {
-            ...stock,
-            price: Number(newPrice.toFixed(2)),
-            change: Number(change.toFixed(2)),
-            changePercent: Number(changePercent.toFixed(2)),
-          }
-        }),
-      )
-    }, 1000) // Update every second for live feel
+      refreshStockData()
+    }, 5 * 60 * 1000) // 5 minutes
 
     return () => clearInterval(interval)
   }, [])
 
   // Update selected stock when stocks update
   useEffect(() => {
-    const updatedStock = stocks.find((s) => s.symbol === selectedStock.symbol)
-    if (updatedStock) {
-      setSelectedStock(updatedStock)
+    if (selectedStock && stocks.length > 0) {
+      const updatedStock = stocks.find((s) => s.symbol === selectedStock.symbol)
+      if (updatedStock) {
+        setSelectedStock(updatedStock)
+      }
     }
-  }, [stocks, selectedStock.symbol])
+  }, [stocks, selectedStock])
+
+  const loadStockData = async () => {
+    setIsLoading(true)
+    try {
+      const stockData = await stockApiService.fetchMultipleStocks(STOCK_SYMBOLS)
+      setStocks(stockData)
+      if (stockData.length > 0 && !selectedStock) {
+        setSelectedStock(stockData[0])
+      }
+    } catch (error) {
+      console.error('Error loading stock data:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const refreshStockData = async () => {
+    setIsRefreshing(true)
+    try {
+      const stockData = await stockApiService.fetchMultipleStocks(STOCK_SYMBOLS)
+      setStocks(stockData)
+    } catch (error) {
+      console.error('Error refreshing stock data:', error)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const filteredStocks = stocks.filter((stock) => {
     const matchesSearch =
@@ -307,11 +95,47 @@ export default function StockPredictor() {
   })
 
   const handlePredictionUpdate = (predictedPrice: number, predictedChange: number) => {
-    setSelectedStock((prev) => ({
-      ...prev,
-      predictedPrice,
-      predictedChange,
-    }))
+    if (selectedStock) {
+      setSelectedStock((prev) => prev ? ({
+        ...prev,
+        predictedPrice,
+        predictedChange,
+      }) : null)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+        <AIBackground />
+        <div className="relative z-10 container mx-auto p-6 flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <Brain className="h-16 w-16 text-blue-400 mx-auto mb-4 animate-pulse" />
+            <h2 className="text-2xl font-bold text-white mb-2">Loading Stock Data</h2>
+            <p className="text-gray-400">Fetching real-time market data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!selectedStock) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+        <AIBackground />
+        <div className="relative z-10 container mx-auto p-6 flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <AlertTriangle className="h-16 w-16 text-yellow-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-2">No Stock Data Available</h2>
+            <p className="text-gray-400 mb-4">Unable to load stock data. Please try again.</p>
+            <Button onClick={loadStockData} className="bg-blue-600 hover:bg-blue-700">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -342,6 +166,15 @@ export default function StockPredictor() {
 
         {/* Market Selector */}
         <div className="flex justify-center gap-4 mb-8">
+          <Button
+            variant="outline"
+            onClick={refreshStockData}
+            disabled={isRefreshing}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
           <Button
             variant={activeMarket === "ALL" ? "default" : "outline"}
             onClick={() => setActiveMarket("ALL")}
@@ -375,7 +208,7 @@ export default function StockPredictor() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-white">
                   <Activity className="h-5 w-5" />
-                  Market Watch
+                  Market Watch ({stocks.length} stocks)
                 </CardTitle>
                 <CardDescription className="text-gray-300">Real-time stock prices and changes</CardDescription>
               </CardHeader>

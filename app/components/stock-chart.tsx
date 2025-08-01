@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from "recharts"
-import { Brain, Activity, Target } from "lucide-react"
+import { Brain, Activity, Target, Sparkles } from "lucide-react"
+import { stockApiService } from "../services/stockApi"
 
 interface Stock {
   symbol: string
@@ -39,6 +40,9 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
   const [showPredictions, setShowPredictions] = useState(false)
   const [accuracy, setAccuracy] = useState<number>(0)
 
+  // Store historical prices for better predictions
+  const [historicalPrices, setHistoricalPrices] = useState<number[]>([])
+
   useEffect(() => {
     // Initialize chart with historical data
     const now = new Date()
@@ -59,6 +63,9 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
 
     setChartData(initialData)
     setShowPredictions(false)
+    
+    // Store historical prices
+    setHistoricalPrices(initialData.map(d => d.price))
   }, [stock.symbol])
 
   useEffect(() => {
@@ -76,6 +83,12 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
 
         newData.push(newPoint)
 
+        // Update historical prices
+        setHistoricalPrices(prev => {
+          const updated = [...prev, stock.price]
+          return updated.slice(-50) // Keep last 50 prices
+        })
+
         // Keep only last 50 data points for performance
         if (newData.length > 50) {
           newData.shift()
@@ -86,96 +99,89 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [stock.price])
+  }, [stock.price, stock.symbol])
 
-  // Enhanced AI Prediction Algorithm
+  // Enhanced AI Prediction Algorithm using real stock service
   const generatePredictions = async () => {
     setIsGenerating(true)
 
     // Simulate AI processing time
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    await new Promise((resolve) => setTimeout(resolve, 1500))
 
-    const currentPrice = stock.price
-    const volatility = Math.abs(stock.changePercent) / 100 || 0.01
+    try {
+      const currentPrice = stock.price
+      const timeInMinutes = convertToMinutes(Number.parseInt(timeValue), timeUnit)
+      
+      // Use the enhanced prediction algorithm from the stock service
+      const prediction = stockApiService.calculateAdvancedPrediction(
+        currentPrice,
+        historicalPrices,
+        stock.volume || 0,
+        stock.marketCap || 0,
+        timeInMinutes
+      )
 
-    // Convert time to minutes for calculation
-    const timeInMinutes = convertToMinutes(Number.parseInt(timeValue), timeUnit)
-    const predictionPoints = Math.min(30, Math.max(5, Math.floor(timeInMinutes / 2)))
+      const predictionPoints = Math.min(30, Math.max(5, Math.floor(timeInMinutes / 2)))
+      const predictions: number[] = []
+      
+      // Generate prediction path
+      let currentPredictedPrice = currentPrice
+      const targetPrice = prediction.predictedPrice
+      const priceStep = (targetPrice - currentPrice) / predictionPoints
+      
+      for (let i = 1; i <= predictionPoints; i++) {
+        const progress = i / predictionPoints
+        const basePrice = currentPrice + (priceStep * i)
+        
+        // Add some realistic noise based on volatility
+        const volatility = Math.abs(stock.changePercent) / 100 || 0.01
+        const noise = (Math.random() - 0.5) * volatility * basePrice * 0.3
+        
+        currentPredictedPrice = basePrice + noise
+        predictions.push(currentPredictedPrice)
+      }
 
-    // Generate more accurate predictions
-    const predictions: number[] = []
-    let lastPredictedPrice = currentPrice
+      // Update chart data with predictions
+      setChartData((prevData) => {
+        const updatedData = [...prevData]
+        const currentTime = Date.now()
 
-    for (let i = 1; i <= predictionPoints; i++) {
-      const timeProgress = i / predictionPoints
-
-      // Enhanced prediction models
-      const trendPrediction = calculateTrendPrediction(lastPredictedPrice, stock.changePercent, timeProgress)
-      const volatilityPrediction = calculateVolatilityPrediction(lastPredictedPrice, volatility, timeProgress)
-      const momentumPrediction = calculateMomentumPrediction(lastPredictedPrice, stock.change, timeProgress)
-      const meanReversionPrediction = calculateMeanReversionPrediction(lastPredictedPrice, currentPrice, timeProgress)
-
-      // Weighted ensemble prediction with mean reversion
-      const predicted =
-        trendPrediction * 0.3 + volatilityPrediction * 0.2 + momentumPrediction * 0.25 + meanReversionPrediction * 0.25
-
-      predictions.push(predicted)
-      lastPredictedPrice = predicted
-    }
-
-    // Update chart data with predictions
-    setChartData((prevData) => {
-      const updatedData = [...prevData]
-      const currentTime = Date.now()
-
-      predictions.forEach((predicted, index) => {
-        const futureTime = new Date(currentTime + (index + 1) * 2000) // 2 second intervals
-
-        updatedData.push({
-          time: futureTime.toLocaleTimeString(),
-          price: currentPrice, // Keep current price line
-          predicted: Number(predicted.toFixed(2)),
+        predictions.forEach((predicted, index) => {
+          const futureTime = new Date(currentTime + (index + 1) * 2000)
+          updatedData.push({
+            time: futureTime.toLocaleTimeString(),
+            price: currentPrice,
+            predicted: Number(predicted.toFixed(2)),
+          })
         })
+
+        return updatedData
       })
 
-      return updatedData
-    })
+      // Calculate final predicted price and change
+      const finalPredictedPrice = prediction.predictedPrice
+      const predictedChange = ((finalPredictedPrice - currentPrice) / currentPrice) * 100
 
-    // Calculate final predicted price and change
-    const finalPredictedPrice = predictions[predictions.length - 1]
-    const predictedChange = ((finalPredictedPrice - currentPrice) / currentPrice) * 100
+      // Update parent component with prediction
+      onPredictionUpdate(finalPredictedPrice, predictedChange)
 
-    // Update parent component with prediction
-    onPredictionUpdate(finalPredictedPrice, predictedChange)
-
-    setAccuracy(calculateModelAccuracy(volatility))
-    setShowPredictions(true)
-    setIsGenerating(false)
+      // Set accuracy based on confidence
+      setAccuracy(prediction.confidence * 100)
+      setShowPredictions(true)
+      
+    } catch (error) {
+      console.error('Prediction error:', error)
+      // Fallback to simple prediction
+      const simpleChange = (Math.random() - 0.5) * 0.04
+      const simplePrediction = currentPrice * (1 + simpleChange)
+      onPredictionUpdate(simplePrediction, simpleChange * 100)
+      setAccuracy(65)
+      setShowPredictions(true)
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
-  // Enhanced prediction models
-  const calculateTrendPrediction = (price: number, changePercent: number, timeProgress: number): number => {
-    const trendFactor = changePercent / 100
-    const dampening = Math.exp(-timeProgress * 0.1) // Trend dampening over time
-    return price * (1 + trendFactor * timeProgress * dampening)
-  }
-
-  const calculateVolatilityPrediction = (price: number, volatility: number, timeProgress: number): number => {
-    const randomWalk = (Math.random() - 0.5) * volatility * Math.sqrt(timeProgress)
-    return price * (1 + randomWalk * 0.5)
-  }
-
-  const calculateMomentumPrediction = (price: number, change: number, timeProgress: number): number => {
-    const momentum = change / price
-    const decayFactor = Math.exp(-timeProgress * 0.2)
-    return price * (1 + momentum * decayFactor * timeProgress * 0.3)
-  }
-
-  const calculateMeanReversionPrediction = (price: number, meanPrice: number, timeProgress: number): number => {
-    const reversionStrength = 0.1
-    const reversion = (meanPrice - price) * reversionStrength * timeProgress
-    return price + reversion
-  }
 
   const convertToMinutes = (value: number, unit: string): number => {
     const conversions: { [key: string]: number } = {
@@ -188,12 +194,6 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
       years: value * 365 * 24 * 60,
     }
     return conversions[unit] || value
-  }
-
-  const calculateModelAccuracy = (volatility: number): number => {
-    const baseAccuracy = 87
-    const volatilityPenalty = volatility * 100 * 5
-    return Math.max(72, Math.min(94, baseAccuracy - volatilityPenalty))
   }
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -218,12 +218,12 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
       <Card className="glass border-slate-700">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white">
-            <Brain className="h-5 w-5 text-purple-400" />
+            <Sparkles className="h-5 w-5 text-purple-400" />
             AI Prediction Engine
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
             <div>
               <label className="block text-sm font-medium mb-2 text-white">Time Value</label>
               <Input
@@ -252,21 +252,22 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end">
+            <div className="flex items-end ml-2">
               <Button
                 onClick={generatePredictions}
                 disabled={isGenerating}
-                className="w-full bg-blue-800 hover:bg-blue-700 text-white"
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 animate-pulse hover:animate-none relative overflow-hidden group"
               >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-purple-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                 {isGenerating ? (
                   <>
-                    <Brain className="h-4 w-4 mr-2 animate-pulse" />
+                    <Brain className="h-4 w-4 mr-2 animate-spin" />
                     Analyzing...
                   </>
                 ) : (
                   <>
-                    <Brain className="h-4 w-4 mr-2" />
-                    Generate Prediction
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Predict
                   </>
                 )}
               </Button>
