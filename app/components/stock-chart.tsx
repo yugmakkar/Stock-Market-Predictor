@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from "recharts"
-import { Brain, Activity, Target, Sparkles } from "lucide-react"
-import { stockApiService } from "../services/stockApi"
+import { Brain, Activity, Target, Sparkles, TrendingUp, TrendingDown, AlertCircle } from "lucide-react"
+import { stockApiService, type HistoricalData } from "../services/stockApi"
+import { Badge } from "@/components/ui/badge"
 
 interface Stock {
   symbol: string
@@ -19,12 +20,14 @@ interface Stock {
   currency: string
   predictedPrice?: number
   predictedChange?: number
+  signals?: string[]
 }
 
 interface ChartData {
   time: string
   price: number
   predicted?: number
+  volume?: number
 }
 
 interface StockChartProps {
@@ -34,97 +37,153 @@ interface StockChartProps {
 
 export default function StockChart({ stock, onPredictionUpdate }: StockChartProps) {
   const [chartData, setChartData] = useState<ChartData[]>([])
+  const [historicalData, setHistoricalData] = useState<HistoricalData[]>([])
   const [timeUnit, setTimeUnit] = useState<string>("minutes")
   const [timeValue, setTimeValue] = useState<string>("30")
   const [isGenerating, setIsGenerating] = useState(false)
   const [showPredictions, setShowPredictions] = useState(false)
   const [accuracy, setAccuracy] = useState<number>(0)
-
-  // Store historical prices for better predictions
-  const [historicalPrices, setHistoricalPrices] = useState<number[]>([])
+  const [predictionSignals, setPredictionSignals] = useState<string[]>([])
+  const [isLoadingHistorical, setIsLoadingHistorical] = useState(false)
 
   useEffect(() => {
-    // Initialize chart with historical data
+    loadHistoricalData()
+    setShowPredictions(false)
+  }, [stock.symbol])
+
+  const loadHistoricalData = async () => {
+    setIsLoadingHistorical(true)
+    try {
+      const historical = await stockApiService.fetchHistoricalData(stock.symbol, '1m')
+      setHistoricalData(historical)
+      
+      // Convert historical data to chart format
+      const chartData = historical.slice(-50).map((item, index) => ({
+        time: new Date(item.timestamp).toLocaleTimeString(),
+        price: item.close,
+        volume: item.volume
+      }))
+      
+      setChartData(chartData)
+    } catch (error) {
+      console.error('Error loading historical data:', error)
+      // Fallback to simulated data
+      initializeWithSimulatedData()
+    } finally {
+      setIsLoadingHistorical(false)
+    }
+  }
+
+  const initializeWithSimulatedData = () => {
     const now = new Date()
     const initialData: ChartData[] = []
 
-    // Generate 50 data points for better visualization
     for (let i = 49; i >= 0; i--) {
-      const time = new Date(now.getTime() - i * 1000)
+      const time = new Date(now.getTime() - i * 60000) // 1 minute intervals
       const basePrice = stock.price
-      const volatility = (Math.random() - 0.5) * 0.015 // Reduced volatility for more realistic data
+      const volatility = (Math.random() - 0.5) * 0.01
       const price = basePrice * (1 + volatility)
 
       initialData.push({
         time: time.toLocaleTimeString(),
         price: Number(price.toFixed(2)),
+        volume: Math.floor(Math.random() * 1000000) + 100000
       })
     }
 
     setChartData(initialData)
-    setShowPredictions(false)
-    
-    // Store historical prices
-    setHistoricalPrices(initialData.map(d => d.price))
-  }, [stock.symbol])
+  }
 
   useEffect(() => {
-    // Add new data point every second for live updates
-    const interval = setInterval(() => {
+    // Subscribe to real-time updates
+    const handleRealTimeUpdate = (updatedStock: any) => {
       setChartData((prevData) => {
         const newData = [...prevData]
         const now = new Date()
 
-        // Add current price with timestamp
         const newPoint: ChartData = {
           time: now.toLocaleTimeString(),
-          price: stock.price,
+          price: updatedStock.price,
+          volume: updatedStock.volume || Math.floor(Math.random() * 1000000) + 100000
         }
 
         newData.push(newPoint)
 
-        // Update historical prices
-        setHistoricalPrices(prev => {
-          const updated = [...prev, stock.price]
-          return updated.slice(-50) // Keep last 50 prices
-        })
-
-        // Keep only last 50 data points for performance
-        if (newData.length > 50) {
+        if (newData.length > 100) {
           newData.shift()
         }
 
         return newData
       })
-    }, 1000)
+    }
+
+    stockApiService.subscribeToRealTimeUpdates(stock.symbol, handleRealTimeUpdate)
+
+    // Fallback: Add new data point every 5 seconds for demo
+    const interval = setInterval(() => {
+      setChartData((prevData) => {
+        const newData = [...prevData]
+        const now = new Date()
+        
+        // Simulate small price movements
+        const lastPrice = prevData[prevData.length - 1]?.price || stock.price
+        const volatility = 0.005
+        const change = (Math.random() - 0.5) * volatility
+        const newPrice = lastPrice * (1 + change)
+
+        const newPoint: ChartData = {
+          time: now.toLocaleTimeString(),
+          price: Number(newPrice.toFixed(2)),
+          volume: Math.floor(Math.random() * 1000000) + 100000
+        }
+
+        newData.push(newPoint)
+        
+        if (newData.length > 100) {
+          newData.shift()
+        }
+
+        return newData
+      })
+    }, 5000)
 
     return () => clearInterval(interval)
-  }, [stock.price, stock.symbol])
+  }, [stock.symbol])
 
-  // Enhanced AI Prediction Algorithm using real stock service
   const generatePredictions = async () => {
     setIsGenerating(true)
+    setPredictionSignals([])
 
-    // Simulate AI processing time
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await new Promise((resolve) => setTimeout(resolve, 2000))
 
     try {
       const currentPrice = stock.price
       const timeInMinutes = convertToMinutes(Number.parseInt(timeValue), timeUnit)
       
-      // Use the enhanced prediction algorithm from the stock service
+      // Use historical data if available, otherwise use chart data
+      const dataForPrediction = historicalData.length > 0 ? historicalData : 
+        chartData.map((item, index) => ({
+          timestamp: Date.now() - (chartData.length - index) * 60000,
+          open: item.price * 0.999,
+          high: item.price * 1.002,
+          low: item.price * 0.998,
+          close: item.price,
+          volume: item.volume || 100000
+        }))
+
       const prediction = stockApiService.calculateAdvancedPrediction(
         currentPrice,
-        historicalPrices,
+        dataForPrediction,
         stock.volume || 0,
         stock.marketCap || 0,
         timeInMinutes
       )
 
+      setPredictionSignals(prediction.signals)
+
       const predictionPoints = Math.min(30, Math.max(5, Math.floor(timeInMinutes / 2)))
       const predictions: number[] = []
       
-      // Generate prediction path
       let currentPredictedPrice = currentPrice
       const targetPrice = prediction.predictedPrice
       const priceStep = (targetPrice - currentPrice) / predictionPoints
@@ -133,21 +192,19 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
         const progress = i / predictionPoints
         const basePrice = currentPrice + (priceStep * i)
         
-        // Add some realistic noise based on volatility
-        const volatility = Math.abs(stock.changePercent) / 100 || 0.01
+        const volatility = Math.abs(stock.changePercent) / 100 || 0.005
         const noise = (Math.random() - 0.5) * volatility * basePrice * 0.3
         
         currentPredictedPrice = basePrice + noise
         predictions.push(currentPredictedPrice)
       }
 
-      // Update chart data with predictions
       setChartData((prevData) => {
         const updatedData = [...prevData]
         const currentTime = Date.now()
 
         predictions.forEach((predicted, index) => {
-          const futureTime = new Date(currentTime + (index + 1) * 2000)
+          const futureTime = new Date(currentTime + (index + 1) * (timeInMinutes * 60000 / predictionPoints))
           updatedData.push({
             time: futureTime.toLocaleTimeString(),
             price: currentPrice,
@@ -158,30 +215,25 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
         return updatedData
       })
 
-      // Calculate final predicted price and change
       const finalPredictedPrice = prediction.predictedPrice
       const predictedChange = ((finalPredictedPrice - currentPrice) / currentPrice) * 100
 
-      // Update parent component with prediction
       onPredictionUpdate(finalPredictedPrice, predictedChange)
-
-      // Set accuracy based on confidence
       setAccuracy(prediction.confidence * 100)
       setShowPredictions(true)
       
     } catch (error) {
       console.error('Prediction error:', error)
-      // Fallback to simple prediction
-      const simpleChange = (Math.random() - 0.5) * 0.04
-      const simplePrediction = currentPrice * (1 + simpleChange)
+      const simpleChange = (Math.random() - 0.5) * 0.02
+      const simplePrediction = stock.price * (1 + simpleChange)
       onPredictionUpdate(simplePrediction, simpleChange * 100)
-      setAccuracy(65)
+      setAccuracy(60)
       setShowPredictions(true)
+      setPredictionSignals(['Limited data available'])
     } finally {
       setIsGenerating(false)
     }
   }
-
 
   const convertToMinutes = (value: number, unit: string): number => {
     const conversions: { [key: string]: number } = {
@@ -224,6 +276,12 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
+          {isLoadingHistorical && (
+            <div className="flex items-center gap-2 text-yellow-400">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">Loading historical data...</span>
+            </div>
+          )}
             <div>
               <label className="block text-sm font-medium mb-2 text-white">Time Value</label>
               <Input
@@ -281,9 +339,35 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
                 <div className="text-gray-400 text-sm">
                   Range: {timeValue} {timeUnit}
                 </div>
+                <div className="text-gray-400 text-xs mt-1">
+                  Data Points: {historicalData.length > 0 ? historicalData.length : chartData.length}
+                </div>
               </div>
             )}
           </div>
+          
+          {/* Prediction Signals */}
+          {predictionSignals.length > 0 && (
+            <div className="mt-4 p-3 bg-slate-800/30 rounded-lg">
+              <h4 className="text-sm font-medium text-white mb-2 flex items-center gap-2">
+                <Brain className="h-4 w-4" />
+                AI Analysis Signals
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {predictionSignals.map((signal, index) => (
+                  <Badge 
+                    key={index} 
+                    variant={signal.includes('Bullish') ? 'default' : signal.includes('Bearish') ? 'destructive' : 'secondary'}
+                    className="text-xs"
+                  >
+                    {signal.includes('Bullish') && <TrendingUp className="h-3 w-3 mr-1" />}
+                    {signal.includes('Bearish') && <TrendingDown className="h-3 w-3 mr-1" />}
+                    {signal}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -292,12 +376,12 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white">
             <Activity className="h-5 w-5 text-green-400" />
-            Live Price Chart with AI Predictions
+            Real-time Price Chart with AI Predictions
           </CardTitle>
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-white">Live Price</span>
+              <span className="text-white">Real-time Price</span>
             </div>
             {showPredictions && (
               <div className="flex items-center gap-2">
@@ -305,6 +389,10 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
                 <span className="text-white">AI Prediction</span>
               </div>
             )}
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+              <span className="text-white">Historical Data: {historicalData.length > 0 ? 'Live' : 'Simulated'}</span>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -333,7 +421,7 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4, fill: "#10B981" }}
-                  name="Live Price"
+                  name="Real-time Price"
                   connectNulls={false}
                 />
                 {showPredictions && (

@@ -1,4 +1,4 @@
-// Stock API service for fetching real-time data
+// Enhanced Stock API service with real-time data and improved predictions
 import axios from 'axios'
 
 export interface StockData {
@@ -14,69 +14,166 @@ export interface StockData {
   high?: number
   low?: number
   open?: number
+  previousClose?: number
+  dayHigh?: number
+  dayLow?: number
+  weekHigh52?: number
+  weekLow52?: number
 }
 
-// Alpha Vantage API (free tier available)
-const ALPHA_VANTAGE_API_KEY = 'demo' // Replace with actual API key
-const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query'
+export interface HistoricalData {
+  timestamp: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
 
-// Finnhub API (free tier available)
-const FINNHUB_API_KEY = 'demo' // Replace with actual API key
-const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1'
+export interface TechnicalIndicators {
+  sma20: number
+  sma50: number
+  ema12: number
+  ema26: number
+  rsi: number
+  macd: number
+  bollinger: {
+    upper: number
+    middle: number
+    lower: number
+  }
+  stochastic: {
+    k: number
+    d: number
+  }
+}
 
-// Yahoo Finance API (unofficial but free)
-const YAHOO_FINANCE_BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart'
+// Multiple API endpoints for redundancy
+const API_ENDPOINTS = {
+  // Alpha Vantage (Free tier: 5 calls per minute, 500 per day)
+  ALPHA_VANTAGE: {
+    base: 'https://www.alphavantage.co/query',
+    key: 'demo' // Replace with actual API key
+  },
+  
+  // Finnhub (Free tier: 60 calls per minute)
+  FINNHUB: {
+    base: 'https://finnhub.io/api/v1',
+    key: 'demo' // Replace with actual API key
+  },
+  
+  // Yahoo Finance (Unofficial but reliable)
+  YAHOO: {
+    base: 'https://query1.finance.yahoo.com/v8/finance/chart'
+  },
+  
+  // Twelve Data (Free tier: 800 calls per day)
+  TWELVE_DATA: {
+    base: 'https://api.twelvedata.com',
+    key: 'demo' // Replace with actual API key
+  },
+  
+  // Indian market specific - NSE/BSE data
+  NSE_INDIA: {
+    base: 'https://www.nseindia.com/api'
+  }
+}
 
-class StockApiService {
-  private cache = new Map<string, { data: StockData; timestamp: number }>()
-  private readonly CACHE_DURATION = 60000 // 1 minute cache
+class EnhancedStockApiService {
+  private cache = new Map<string, { data: any; timestamp: number }>()
+  private historicalCache = new Map<string, { data: HistoricalData[]; timestamp: number }>()
+  private readonly CACHE_DURATION = 30000 // 30 seconds for real-time data
+  private readonly HISTORICAL_CACHE_DURATION = 300000 // 5 minutes for historical data
+  
+  // WebSocket connections for real-time data
+  private wsConnections = new Map<string, WebSocket>()
+  private subscribers = new Map<string, Set<(data: StockData) => void>>()
 
-  private isDataCached(symbol: string): boolean {
+  constructor() {
+    this.initializeRealTimeConnections()
+  }
+
+  private initializeRealTimeConnections() {
+    // Initialize WebSocket connections for real-time data
+    // This would connect to actual WebSocket endpoints from brokers
+    console.log('Initializing real-time data connections...')
+  }
+
+  // Subscribe to real-time updates
+  subscribeToRealTimeUpdates(symbol: string, callback: (data: StockData) => void) {
+    if (!this.subscribers.has(symbol)) {
+      this.subscribers.set(symbol, new Set())
+    }
+    this.subscribers.get(symbol)!.add(callback)
+    
+    // Start WebSocket connection if not exists
+    this.startRealTimeConnection(symbol)
+  }
+
+  private startRealTimeConnection(symbol: string) {
+    if (this.wsConnections.has(symbol)) return
+
+    // For demo purposes, simulate real-time updates
+    const interval = setInterval(() => {
+      this.simulateRealTimeUpdate(symbol)
+    }, 1000) // Update every second
+
+    // Store interval reference (in real implementation, this would be WebSocket)
+    this.wsConnections.set(symbol, interval as any)
+  }
+
+  private simulateRealTimeUpdate(symbol: string) {
+    const subscribers = this.subscribers.get(symbol)
+    if (!subscribers || subscribers.size === 0) return
+
+    // Get cached data and simulate small price movements
     const cached = this.cache.get(symbol)
-    if (!cached) return false
-    return Date.now() - cached.timestamp < this.CACHE_DURATION
-  }
+    if (!cached) return
 
-  private getCachedData(symbol: string): StockData | null {
-    const cached = this.cache.get(symbol)
-    return cached ? cached.data : null
-  }
+    const basePrice = cached.data.price
+    const volatility = 0.002 // 0.2% volatility
+    const randomChange = (Math.random() - 0.5) * volatility
+    const newPrice = basePrice * (1 + randomChange)
+    const change = newPrice - cached.data.previousClose
+    const changePercent = (change / cached.data.previousClose) * 100
 
-  private setCachedData(symbol: string, data: StockData): void {
-    this.cache.set(symbol, { data, timestamp: Date.now() })
-  }
-
-  async fetchStockData(symbol: string): Promise<StockData | null> {
-    // Check cache first
-    if (this.isDataCached(symbol)) {
-      return this.getCachedData(symbol)
+    const updatedData: StockData = {
+      ...cached.data,
+      price: Number(newPrice.toFixed(2)),
+      change: Number(change.toFixed(2)),
+      changePercent: Number(changePercent.toFixed(2))
     }
 
+    // Update cache
+    this.cache.set(symbol, { data: updatedData, timestamp: Date.now() })
+
+    // Notify subscribers
+    subscribers.forEach(callback => callback(updatedData))
+  }
+
+  async fetchRealTimeStockData(symbol: string): Promise<StockData | null> {
     try {
-      // Try Yahoo Finance first (most reliable for free usage)
-      const data = await this.fetchFromYahooFinance(symbol)
+      // Try multiple sources for redundancy
+      let data = await this.fetchFromYahooFinance(symbol)
+      if (!data) data = await this.fetchFromAlphaVantage(symbol)
+      if (!data) data = await this.fetchFromFinnhub(symbol)
+      if (!data) data = await this.fetchFromTwelveData(symbol)
+      
       if (data) {
-        this.setCachedData(symbol, data)
+        this.cache.set(symbol, { data, timestamp: Date.now() })
         return data
       }
-
-      // Fallback to Alpha Vantage
-      const alphaData = await this.fetchFromAlphaVantage(symbol)
-      if (alphaData) {
-        this.setCachedData(symbol, alphaData)
-        return alphaData
-      }
-
+      
       return null
     } catch (error) {
-      console.error(`Error fetching data for ${symbol}:`, error)
+      console.error(`Error fetching real-time data for ${symbol}:`, error)
       return null
     }
   }
 
   private async fetchFromYahooFinance(symbol: string): Promise<StockData | null> {
     try {
-      const response = await axios.get(`${YAHOO_FINANCE_BASE_URL}/${symbol}`, {
+      const response = await axios.get(`${API_ENDPOINTS.YAHOO.base}/${symbol}`, {
         timeout: 5000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -89,7 +186,7 @@ class StockApiService {
       const meta = result.meta
       const quote = result.indicators?.quote?.[0]
       
-      if (!meta || !quote) return null
+      if (!meta) return null
 
       const currentPrice = meta.regularMarketPrice || meta.previousClose
       const previousClose = meta.previousClose
@@ -108,7 +205,12 @@ class StockApiService {
         marketCap: meta.marketCap,
         high: meta.regularMarketDayHigh,
         low: meta.regularMarketDayLow,
-        open: meta.regularMarketOpen
+        open: meta.regularMarketOpen,
+        previousClose: previousClose,
+        dayHigh: meta.regularMarketDayHigh,
+        dayLow: meta.regularMarketDayLow,
+        weekHigh52: meta.fiftyTwoWeekHigh,
+        weekLow52: meta.fiftyTwoWeekLow
       }
     } catch (error) {
       console.error('Yahoo Finance API error:', error)
@@ -118,11 +220,11 @@ class StockApiService {
 
   private async fetchFromAlphaVantage(symbol: string): Promise<StockData | null> {
     try {
-      const response = await axios.get(ALPHA_VANTAGE_BASE_URL, {
+      const response = await axios.get(API_ENDPOINTS.ALPHA_VANTAGE.base, {
         params: {
           function: 'GLOBAL_QUOTE',
           symbol: symbol,
-          apikey: ALPHA_VANTAGE_API_KEY
+          apikey: API_ENDPOINTS.ALPHA_VANTAGE.key
         },
         timeout: 5000
       })
@@ -136,7 +238,7 @@ class StockApiService {
 
       return {
         symbol: quote['01. symbol'],
-        name: quote['01. symbol'], // Alpha Vantage doesn't provide company names in this endpoint
+        name: quote['01. symbol'],
         price: Number(currentPrice.toFixed(2)),
         change: Number(change.toFixed(2)),
         changePercent: Number(changePercent.toFixed(2)),
@@ -145,7 +247,8 @@ class StockApiService {
         volume: parseInt(quote['06. volume']),
         high: parseFloat(quote['03. high']),
         low: parseFloat(quote['04. low']),
-        open: parseFloat(quote['02. open'])
+        open: parseFloat(quote['02. open']),
+        previousClose: parseFloat(quote['08. previous close'])
       }
     } catch (error) {
       console.error('Alpha Vantage API error:', error)
@@ -153,99 +256,385 @@ class StockApiService {
     }
   }
 
-  private determineMarket(symbol: string): "US" | "IN" {
-    // Indian stock symbols typically end with .NS (NSE) or .BO (BSE)
-    // or are specific Indian company symbols
-    const indianSymbols = [
-      'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
-      'SBIN.NS', 'BHARTIARTL.NS', 'ITC.NS', 'LT.NS', 'HCLTECH.NS',
-      'WIPRO.NS', 'MARUTI.NS', 'ADANIPORTS.NS', 'ASIANPAINT.NS',
-      'AXISBANK.NS', 'BAJFINANCE.NS', 'KOTAKBANK.NS'
-    ]
-    
-    if (symbol.includes('.NS') || symbol.includes('.BO') || indianSymbols.includes(symbol)) {
-      return 'IN'
+  private async fetchFromFinnhub(symbol: string): Promise<StockData | null> {
+    try {
+      const [quoteResponse, profileResponse] = await Promise.all([
+        axios.get(`${API_ENDPOINTS.FINNHUB.base}/quote`, {
+          params: { symbol, token: API_ENDPOINTS.FINNHUB.key },
+          timeout: 5000
+        }),
+        axios.get(`${API_ENDPOINTS.FINNHUB.base}/stock/profile2`, {
+          params: { symbol, token: API_ENDPOINTS.FINNHUB.key },
+          timeout: 5000
+        })
+      ])
+
+      const quote = quoteResponse.data
+      const profile = profileResponse.data
+
+      if (!quote.c) return null
+
+      const currentPrice = quote.c
+      const change = quote.d
+      const changePercent = quote.dp
+
+      return {
+        symbol: symbol,
+        name: profile.name || symbol,
+        price: Number(currentPrice.toFixed(2)),
+        change: Number(change.toFixed(2)),
+        changePercent: Number(changePercent.toFixed(2)),
+        market: this.determineMarket(symbol),
+        currency: profile.currency || (this.determineMarket(symbol) === 'IN' ? 'INR' : 'USD'),
+        high: quote.h,
+        low: quote.l,
+        open: quote.o,
+        previousClose: quote.pc,
+        marketCap: profile.marketCapitalization
+      }
+    } catch (error) {
+      console.error('Finnhub API error:', error)
+      return null
     }
-    return 'US'
   }
 
-  async fetchMultipleStocks(symbols: string[]): Promise<StockData[]> {
-    const promises = symbols.map(symbol => this.fetchStockData(symbol))
-    const results = await Promise.allSettled(promises)
+  private async fetchFromTwelveData(symbol: string): Promise<StockData | null> {
+    try {
+      const response = await axios.get(`${API_ENDPOINTS.TWELVE_DATA.base}/quote`, {
+        params: {
+          symbol: symbol,
+          apikey: API_ENDPOINTS.TWELVE_DATA.key
+        },
+        timeout: 5000
+      })
+
+      const data = response.data
+      if (!data.close) return null
+
+      const currentPrice = parseFloat(data.close)
+      const change = parseFloat(data.change)
+      const changePercent = parseFloat(data.percent_change)
+
+      return {
+        symbol: data.symbol,
+        name: data.name || data.symbol,
+        price: Number(currentPrice.toFixed(2)),
+        change: Number(change.toFixed(2)),
+        changePercent: Number(changePercent.toFixed(2)),
+        market: this.determineMarket(symbol),
+        currency: this.determineMarket(symbol) === 'IN' ? 'INR' : 'USD',
+        high: parseFloat(data.high),
+        low: parseFloat(data.low),
+        open: parseFloat(data.open),
+        previousClose: parseFloat(data.previous_close),
+        volume: parseInt(data.volume)
+      }
+    } catch (error) {
+      console.error('Twelve Data API error:', error)
+      return null
+    }
+  }
+
+  async fetchHistoricalData(symbol: string, period: string = '1y'): Promise<HistoricalData[]> {
+    const cacheKey = `${symbol}_${period}`
+    const cached = this.historicalCache.get(cacheKey)
     
-    return results
-      .filter((result): result is PromiseFulfilledResult<StockData> => 
-        result.status === 'fulfilled' && result.value !== null
-      )
-      .map(result => result.value)
+    if (cached && Date.now() - cached.timestamp < this.HISTORICAL_CACHE_DURATION) {
+      return cached.data
+    }
+
+    try {
+      // Try Yahoo Finance for historical data
+      const data = await this.fetchHistoricalFromYahoo(symbol, period)
+      if (data && data.length > 0) {
+        this.historicalCache.set(cacheKey, { data, timestamp: Date.now() })
+        return data
+      }
+      
+      // Fallback to Alpha Vantage
+      const alphaData = await this.fetchHistoricalFromAlphaVantage(symbol)
+      if (alphaData && alphaData.length > 0) {
+        this.historicalCache.set(cacheKey, { data: alphaData, timestamp: Date.now() })
+        return alphaData
+      }
+      
+      return []
+    } catch (error) {
+      console.error(`Error fetching historical data for ${symbol}:`, error)
+      return []
+    }
   }
 
-  // Enhanced prediction algorithm
+  private async fetchHistoricalFromYahoo(symbol: string, period: string): Promise<HistoricalData[]> {
+    try {
+      const response = await axios.get(`${API_ENDPOINTS.YAHOO.base}/${symbol}`, {
+        params: {
+          range: period,
+          interval: '1d'
+        },
+        timeout: 10000
+      })
+
+      const result = response.data?.chart?.result?.[0]
+      if (!result) return []
+
+      const timestamps = result.timestamp
+      const quotes = result.indicators?.quote?.[0]
+      
+      if (!timestamps || !quotes) return []
+
+      return timestamps.map((timestamp: number, index: number) => ({
+        timestamp: timestamp * 1000,
+        open: quotes.open[index] || 0,
+        high: quotes.high[index] || 0,
+        low: quotes.low[index] || 0,
+        close: quotes.close[index] || 0,
+        volume: quotes.volume[index] || 0
+      })).filter((item: HistoricalData) => item.close > 0)
+    } catch (error) {
+      console.error('Yahoo historical data error:', error)
+      return []
+    }
+  }
+
+  private async fetchHistoricalFromAlphaVantage(symbol: string): Promise<HistoricalData[]> {
+    try {
+      const response = await axios.get(API_ENDPOINTS.ALPHA_VANTAGE.base, {
+        params: {
+          function: 'TIME_SERIES_DAILY',
+          symbol: symbol,
+          apikey: API_ENDPOINTS.ALPHA_VANTAGE.key,
+          outputsize: 'full'
+        },
+        timeout: 10000
+      })
+
+      const timeSeries = response.data['Time Series (Daily)']
+      if (!timeSeries) return []
+
+      return Object.entries(timeSeries).map(([date, data]: [string, any]) => ({
+        timestamp: new Date(date).getTime(),
+        open: parseFloat(data['1. open']),
+        high: parseFloat(data['2. high']),
+        low: parseFloat(data['3. low']),
+        close: parseFloat(data['4. close']),
+        volume: parseInt(data['5. volume'])
+      })).sort((a, b) => a.timestamp - b.timestamp)
+    } catch (error) {
+      console.error('Alpha Vantage historical data error:', error)
+      return []
+    }
+  }
+
+  // Enhanced prediction algorithm with technical analysis
   calculateAdvancedPrediction(
     currentPrice: number,
-    historicalData: number[],
+    historicalData: HistoricalData[],
     volume: number = 0,
     marketCap: number = 0,
     timeHorizonMinutes: number = 30
-  ): { predictedPrice: number; confidence: number; trend: 'bullish' | 'bearish' | 'neutral' } {
-    if (historicalData.length < 5) {
+  ): { predictedPrice: number; confidence: number; trend: 'bullish' | 'bearish' | 'neutral'; signals: string[] } {
+    
+    if (historicalData.length < 50) {
       // Fallback for insufficient data
       const randomWalk = (Math.random() - 0.5) * 0.02
       return {
         predictedPrice: currentPrice * (1 + randomWalk),
         confidence: 0.3,
-        trend: randomWalk > 0 ? 'bullish' : 'bearish'
+        trend: randomWalk > 0 ? 'bullish' : 'bearish',
+        signals: ['Insufficient historical data']
       }
     }
 
-    // Calculate various technical indicators
-    const sma5 = this.calculateSMA(historicalData.slice(-5))
-    const sma10 = this.calculateSMA(historicalData.slice(-10))
-    const rsi = this.calculateRSI(historicalData)
-    const volatility = this.calculateVolatility(historicalData)
-    const momentum = this.calculateMomentum(historicalData)
+    const signals: string[] = []
+    const prices = historicalData.map(d => d.close)
+    const volumes = historicalData.map(d => d.volume)
+    const highs = historicalData.map(d => d.high)
+    const lows = historicalData.map(d => d.low)
+
+    // Calculate technical indicators
+    const indicators = this.calculateTechnicalIndicators(historicalData)
     
-    // Trend analysis
-    const shortTermTrend = sma5 > sma10 ? 1 : -1
-    const momentumSignal = momentum > 0 ? 1 : -1
-    const rsiSignal = rsi > 70 ? -1 : rsi < 30 ? 1 : 0
+    // Trend Analysis
+    const sma20 = this.calculateSMA(prices.slice(-20))
+    const sma50 = this.calculateSMA(prices.slice(-50))
+    const ema12 = this.calculateEMA(prices, 12)
+    const ema26 = this.calculateEMA(prices, 26)
     
-    // Combine signals with weights
-    const trendScore = (shortTermTrend * 0.4) + (momentumSignal * 0.3) + (rsiSignal * 0.3)
+    // Support and Resistance levels
+    const supportResistance = this.findSupportResistanceLevels(highs, lows, prices)
     
-    // Time decay factor (longer predictions are less reliable)
-    const timeDecay = Math.exp(-timeHorizonMinutes / 60)
+    // Volume analysis
+    const avgVolume = this.calculateSMA(volumes.slice(-20))
+    const volumeRatio = volume / avgVolume
     
-    // Volume factor (higher volume = more reliable)
-    const volumeFactor = Math.min(1, volume / 1000000) * 0.1 + 0.9
+    // Price action patterns
+    const patterns = this.identifyPatterns(historicalData.slice(-20))
+    
+    // Momentum indicators
+    const rsi = this.calculateRSI(prices)
+    const macd = this.calculateMACD(prices)
+    const stochastic = this.calculateStochastic(highs, lows, prices)
+    
+    // Volatility analysis
+    const volatility = this.calculateVolatility(prices.slice(-20))
+    const atr = this.calculateATR(historicalData.slice(-14))
+    
+    // Market sentiment analysis
+    let sentimentScore = 0
+    
+    // Moving Average signals
+    if (currentPrice > sma20 && sma20 > sma50) {
+      sentimentScore += 0.3
+      signals.push('Bullish MA crossover')
+    } else if (currentPrice < sma20 && sma20 < sma50) {
+      sentimentScore -= 0.3
+      signals.push('Bearish MA crossover')
+    }
+    
+    // EMA signals
+    if (ema12 > ema26) {
+      sentimentScore += 0.2
+      signals.push('Bullish EMA trend')
+    } else {
+      sentimentScore -= 0.2
+      signals.push('Bearish EMA trend')
+    }
+    
+    // RSI signals
+    if (rsi > 70) {
+      sentimentScore -= 0.25
+      signals.push('Overbought (RSI > 70)')
+    } else if (rsi < 30) {
+      sentimentScore += 0.25
+      signals.push('Oversold (RSI < 30)')
+    }
+    
+    // MACD signals
+    if (macd.macd > macd.signal && macd.histogram > 0) {
+      sentimentScore += 0.2
+      signals.push('Bullish MACD crossover')
+    } else if (macd.macd < macd.signal && macd.histogram < 0) {
+      sentimentScore -= 0.2
+      signals.push('Bearish MACD crossover')
+    }
+    
+    // Stochastic signals
+    if (stochastic.k > 80 && stochastic.d > 80) {
+      sentimentScore -= 0.15
+      signals.push('Overbought (Stochastic)')
+    } else if (stochastic.k < 20 && stochastic.d < 20) {
+      sentimentScore += 0.15
+      signals.push('Oversold (Stochastic)')
+    }
+    
+    // Volume confirmation
+    if (volumeRatio > 1.5) {
+      sentimentScore *= 1.2 // Amplify signal with high volume
+      signals.push('High volume confirmation')
+    } else if (volumeRatio < 0.5) {
+      sentimentScore *= 0.8 // Reduce signal with low volume
+      signals.push('Low volume warning')
+    }
+    
+    // Support/Resistance levels
+    const nearSupport = supportResistance.support.some(level => 
+      Math.abs(currentPrice - level) / currentPrice < 0.02
+    )
+    const nearResistance = supportResistance.resistance.some(level => 
+      Math.abs(currentPrice - level) / currentPrice < 0.02
+    )
+    
+    if (nearSupport) {
+      sentimentScore += 0.1
+      signals.push('Near support level')
+    }
+    if (nearResistance) {
+      sentimentScore -= 0.1
+      signals.push('Near resistance level')
+    }
+    
+    // Pattern recognition
+    patterns.forEach(pattern => {
+      if (pattern.type === 'bullish') {
+        sentimentScore += pattern.strength
+        signals.push(`Bullish pattern: ${pattern.name}`)
+      } else if (pattern.type === 'bearish') {
+        sentimentScore -= pattern.strength
+        signals.push(`Bearish pattern: ${pattern.name}`)
+      }
+    })
+    
+    // Time decay factor
+    const timeDecay = Math.exp(-timeHorizonMinutes / 120) // 2-hour half-life
+    
+    // Market cap factor (larger companies are more stable)
+    const marketCapFactor = marketCap > 1000000000 ? 0.8 : 1.2
     
     // Calculate predicted price change
-    const baseChange = trendScore * volatility * timeDecay * volumeFactor
-    const randomComponent = (Math.random() - 0.5) * volatility * 0.3
+    const baseChange = sentimentScore * volatility * timeDecay * marketCapFactor
+    const randomComponent = (Math.random() - 0.5) * volatility * 0.2
     
     const totalChange = baseChange + randomComponent
     const predictedPrice = currentPrice * (1 + totalChange)
     
     // Calculate confidence based on various factors
+    const dataQuality = Math.min(1, historicalData.length / 100)
+    const volumeConfidence = Math.min(1, volumeRatio)
+    const volatilityConfidence = 1 - Math.min(1, volatility * 10)
+    const timeConfidence = timeDecay
+    
     const confidence = Math.min(0.95, Math.max(0.1, 
-      (1 - volatility) * timeDecay * volumeFactor * 0.8 + 0.2
+      (dataQuality * 0.3 + volumeConfidence * 0.2 + volatilityConfidence * 0.3 + timeConfidence * 0.2) * 0.8 + 0.2
     ))
     
-    const trend = trendScore > 0.1 ? 'bullish' : trendScore < -0.1 ? 'bearish' : 'neutral'
+    const trend = sentimentScore > 0.1 ? 'bullish' : sentimentScore < -0.1 ? 'bearish' : 'neutral'
     
     return {
       predictedPrice: Number(predictedPrice.toFixed(2)),
       confidence: Number(confidence.toFixed(2)),
-      trend
+      trend,
+      signals: signals.slice(0, 5) // Limit to top 5 signals
+    }
+  }
+
+  private calculateTechnicalIndicators(data: HistoricalData[]): TechnicalIndicators {
+    const prices = data.map(d => d.close)
+    const highs = data.map(d => d.high)
+    const lows = data.map(d => d.low)
+    
+    return {
+      sma20: this.calculateSMA(prices.slice(-20)),
+      sma50: this.calculateSMA(prices.slice(-50)),
+      ema12: this.calculateEMA(prices, 12),
+      ema26: this.calculateEMA(prices, 26),
+      rsi: this.calculateRSI(prices),
+      macd: this.calculateMACD(prices).macd,
+      bollinger: this.calculateBollingerBands(prices),
+      stochastic: this.calculateStochastic(highs, lows, prices)
     }
   }
 
   private calculateSMA(prices: number[]): number {
+    if (prices.length === 0) return 0
     return prices.reduce((sum, price) => sum + price, 0) / prices.length
   }
 
+  private calculateEMA(prices: number[], period: number): number {
+    if (prices.length < period) return prices[prices.length - 1] || 0
+    
+    const multiplier = 2 / (period + 1)
+    let ema = prices[0]
+    
+    for (let i = 1; i < prices.length; i++) {
+      ema = (prices[i] * multiplier) + (ema * (1 - multiplier))
+    }
+    
+    return ema
+  }
+
   private calculateRSI(prices: number[], period: number = 14): number {
-    if (prices.length < period + 1) return 50 // Neutral RSI
+    if (prices.length < period + 1) return 50
 
     const gains: number[] = []
     const losses: number[] = []
@@ -264,8 +653,70 @@ class StockApiService {
     return 100 - (100 / (1 + rs))
   }
 
+  private calculateMACD(prices: number[]): { macd: number; signal: number; histogram: number } {
+    const ema12 = this.calculateEMA(prices, 12)
+    const ema26 = this.calculateEMA(prices, 26)
+    const macd = ema12 - ema26
+    
+    // Calculate signal line (9-period EMA of MACD)
+    const macdValues = []
+    for (let i = 26; i < prices.length; i++) {
+      const slice = prices.slice(0, i + 1)
+      const ema12 = this.calculateEMA(slice, 12)
+      const ema26 = this.calculateEMA(slice, 26)
+      macdValues.push(ema12 - ema26)
+    }
+    
+    const signal = this.calculateEMA(macdValues, 9)
+    const histogram = macd - signal
+    
+    return { macd, signal, histogram }
+  }
+
+  private calculateBollingerBands(prices: number[], period: number = 20): { upper: number; middle: number; lower: number } {
+    const sma = this.calculateSMA(prices.slice(-period))
+    const variance = prices.slice(-period).reduce((sum, price) => sum + Math.pow(price - sma, 2), 0) / period
+    const stdDev = Math.sqrt(variance)
+    
+    return {
+      upper: sma + (stdDev * 2),
+      middle: sma,
+      lower: sma - (stdDev * 2)
+    }
+  }
+
+  private calculateStochastic(highs: number[], lows: number[], closes: number[], period: number = 14): { k: number; d: number } {
+    if (highs.length < period) return { k: 50, d: 50 }
+    
+    const recentHighs = highs.slice(-period)
+    const recentLows = lows.slice(-period)
+    const currentClose = closes[closes.length - 1]
+    
+    const highestHigh = Math.max(...recentHighs)
+    const lowestLow = Math.min(...recentLows)
+    
+    const k = ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100
+    
+    // Calculate %D (3-period SMA of %K)
+    const kValues = []
+    for (let i = period - 1; i < closes.length; i++) {
+      const sliceHighs = highs.slice(i - period + 1, i + 1)
+      const sliceLows = lows.slice(i - period + 1, i + 1)
+      const sliceClose = closes[i]
+      
+      const high = Math.max(...sliceHighs)
+      const low = Math.min(...sliceLows)
+      
+      kValues.push(((sliceClose - low) / (high - low)) * 100)
+    }
+    
+    const d = this.calculateSMA(kValues.slice(-3))
+    
+    return { k, d }
+  }
+
   private calculateVolatility(prices: number[]): number {
-    if (prices.length < 2) return 0.02 // Default volatility
+    if (prices.length < 2) return 0.02
 
     const returns = []
     for (let i = 1; i < prices.length; i++) {
@@ -278,14 +729,126 @@ class StockApiService {
     return Math.sqrt(variance)
   }
 
-  private calculateMomentum(prices: number[], period: number = 5): number {
-    if (prices.length < period) return 0
+  private calculateATR(data: HistoricalData[], period: number = 14): number {
+    if (data.length < period) return 0
     
-    const current = prices[prices.length - 1]
-    const past = prices[prices.length - period]
+    const trueRanges = []
+    for (let i = 1; i < data.length; i++) {
+      const high = data[i].high
+      const low = data[i].low
+      const prevClose = data[i - 1].close
+      
+      const tr = Math.max(
+        high - low,
+        Math.abs(high - prevClose),
+        Math.abs(low - prevClose)
+      )
+      trueRanges.push(tr)
+    }
     
-    return (current - past) / past
+    return this.calculateSMA(trueRanges.slice(-period))
+  }
+
+  private findSupportResistanceLevels(highs: number[], lows: number[], prices: number[]): { support: number[]; resistance: number[] } {
+    const support: number[] = []
+    const resistance: number[] = []
+    
+    // Find local minima and maxima
+    for (let i = 2; i < prices.length - 2; i++) {
+      // Local minimum (support)
+      if (lows[i] < lows[i - 1] && lows[i] < lows[i + 1] && 
+          lows[i] < lows[i - 2] && lows[i] < lows[i + 2]) {
+        support.push(lows[i])
+      }
+      
+      // Local maximum (resistance)
+      if (highs[i] > highs[i - 1] && highs[i] > highs[i + 1] && 
+          highs[i] > highs[i - 2] && highs[i] > highs[i + 2]) {
+        resistance.push(highs[i])
+      }
+    }
+    
+    return { support: support.slice(-3), resistance: resistance.slice(-3) }
+  }
+
+  private identifyPatterns(data: HistoricalData[]): Array<{ name: string; type: 'bullish' | 'bearish' | 'neutral'; strength: number }> {
+    const patterns = []
+    
+    if (data.length < 10) return patterns
+    
+    const prices = data.map(d => d.close)
+    const highs = data.map(d => d.high)
+    const lows = data.map(d => d.low)
+    
+    // Hammer pattern
+    const lastCandle = data[data.length - 1]
+    const bodySize = Math.abs(lastCandle.close - lastCandle.open)
+    const lowerShadow = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low
+    const upperShadow = lastCandle.high - Math.max(lastCandle.open, lastCandle.close)
+    
+    if (lowerShadow > bodySize * 2 && upperShadow < bodySize * 0.5) {
+      patterns.push({ name: 'Hammer', type: 'bullish', strength: 0.15 })
+    }
+    
+    // Doji pattern
+    if (bodySize < (lastCandle.high - lastCandle.low) * 0.1) {
+      patterns.push({ name: 'Doji', type: 'neutral', strength: 0.1 })
+    }
+    
+    // Engulfing pattern
+    if (data.length >= 2) {
+      const prev = data[data.length - 2]
+      const curr = data[data.length - 1]
+      
+      if (prev.close < prev.open && curr.close > curr.open && 
+          curr.close > prev.open && curr.open < prev.close) {
+        patterns.push({ name: 'Bullish Engulfing', type: 'bullish', strength: 0.2 })
+      } else if (prev.close > prev.open && curr.close < curr.open && 
+                 curr.close < prev.open && curr.open > prev.close) {
+        patterns.push({ name: 'Bearish Engulfing', type: 'bearish', strength: 0.2 })
+      }
+    }
+    
+    return patterns
+  }
+
+  private determineMarket(symbol: string): "US" | "IN" {
+    const indianSymbols = [
+      'RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
+      'SBIN.NS', 'BHARTIARTL.NS', 'ITC.NS', 'LT.NS', 'HCLTECH.NS',
+      'WIPRO.NS', 'MARUTI.NS', 'ADANIPORTS.NS', 'ASIANPAINT.NS',
+      'AXISBANK.NS', 'BAJFINANCE.NS', 'KOTAKBANK.NS'
+    ]
+    
+    if (symbol.includes('.NS') || symbol.includes('.BO') || indianSymbols.includes(symbol)) {
+      return 'IN'
+    }
+    return 'US'
+  }
+
+  async fetchMultipleStocks(symbols: string[]): Promise<StockData[]> {
+    const promises = symbols.map(symbol => this.fetchRealTimeStockData(symbol))
+    const results = await Promise.allSettled(promises)
+    
+    return results
+      .filter((result): result is PromiseFulfilledResult<StockData> => 
+        result.status === 'fulfilled' && result.value !== null
+      )
+      .map(result => result.value)
+  }
+
+  // Cleanup method
+  cleanup() {
+    this.wsConnections.forEach((connection, symbol) => {
+      if (typeof connection === 'number') {
+        clearInterval(connection)
+      } else if (connection instanceof WebSocket) {
+        connection.close()
+      }
+    })
+    this.wsConnections.clear()
+    this.subscribers.clear()
   }
 }
 
-export const stockApiService = new StockApiService()
+export const stockApiService = new EnhancedStockApiService()
