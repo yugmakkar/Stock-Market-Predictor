@@ -615,6 +615,12 @@ class EnhancedStockApiService {
 
   private async fetchHistoricalFromYahoo(symbol: string, period: string): Promise<HistoricalData[]> {
     try {
+      // Skip Yahoo Finance if we know it will fail due to CORS in browser
+      if (typeof window !== 'undefined') {
+        console.warn('Yahoo Finance historical data API blocked by CORS in browser, falling back to other sources')
+        return []
+      }
+      
       const response = await axios.get(`${API_ENDPOINTS.YAHOO.base}/${symbol}`, {
         params: {
           range: period,
@@ -640,7 +646,7 @@ class EnhancedStockApiService {
         volume: quotes.volume[index] || 0
       })).filter((item: HistoricalData) => item.close > 0)
     } catch (error) {
-      console.error('Yahoo historical data error:', error)
+      console.warn('Yahoo historical data error:', error instanceof Error ? error.message : 'Unknown error')
       return []
     }
   }
