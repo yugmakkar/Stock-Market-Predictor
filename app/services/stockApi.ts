@@ -1,4 +1,4 @@
-// Enhanced Stock API service with real-time data and improved predictions
+// Enhanced Stock API service with Yahoo Finance unofficial API
 import axios from 'axios'
 
 export interface StockData {
@@ -48,192 +48,13 @@ export interface TechnicalIndicators {
   }
 }
 
-// Multiple API endpoints for redundancy
-const API_ENDPOINTS = {
-  // Alpha Vantage (Free tier: 5 calls per minute, 500 per day)
-  ALPHA_VANTAGE: {
-    base: 'https://www.alphavantage.co/query',
-    key: process.env.NEXT_PUBLIC_ALPHA_VANTAGE_KEY || 'demo' // Replace with actual API key
-  },
-  
-  // Finnhub (Free tier: 60 calls per minute)
-  FINNHUB: {
-    base: 'https://finnhub.io/api/v1',
-    key: process.env.NEXT_PUBLIC_FINNHUB_KEY || 'demo' // Replace with actual API key
-  },
-  
-  // Yahoo Finance (Unofficial but reliable)
-  YAHOO: {
-    base: 'https://query1.finance.yahoo.com/v8/finance/chart'
-  },
-  
-  // Twelve Data (Free tier: 800 calls per day)
-  TWELVE_DATA: {
-    base: 'https://api.twelvedata.com',
-    key: process.env.NEXT_PUBLIC_TWELVE_DATA_KEY || 'demo' // Replace with actual API key
-  },
-  
-  // Indian market specific - NSE/BSE data
-  NSE_INDIA: {
-    base: 'https://www.nseindia.com/api'
-  }
+// Yahoo Finance unofficial API endpoints
+const YAHOO_FINANCE_API = {
+  quote: 'https://query1.finance.yahoo.com/v8/finance/chart',
+  search: 'https://query2.finance.yahoo.com/v1/finance/search',
+  options: 'https://query2.finance.yahoo.com/v7/finance/options'
 }
 
-// Mock data for fallback when APIs are unavailable
-const MOCK_STOCK_DATA: { [key: string]: StockData } = {
-  'AAPL': {
-    symbol: 'AAPL',
-    name: 'Apple Inc.',
-    price: 175.43,
-    change: 2.15,
-    changePercent: 1.24,
-    market: 'US',
-    currency: 'USD',
-    volume: 45678900,
-    marketCap: 2750000000000,
-    high: 176.80,
-    low: 173.20,
-    open: 174.10,
-    previousClose: 173.28,
-    dayHigh: 176.80,
-    dayLow: 173.20,
-    weekHigh52: 199.62,
-    weekLow52: 164.08
-  },
-  'GOOGL': {
-    symbol: 'GOOGL',
-    name: 'Alphabet Inc.',
-    price: 138.21,
-    change: -1.45,
-    changePercent: -1.04,
-    market: 'US',
-    currency: 'USD',
-    volume: 23456789,
-    marketCap: 1750000000000,
-    high: 140.15,
-    low: 137.80,
-    open: 139.50,
-    previousClose: 139.66,
-    dayHigh: 140.15,
-    dayLow: 137.80,
-    weekHigh52: 153.78,
-    weekLow52: 121.46
-  },
-  'MSFT': {
-    symbol: 'MSFT',
-    name: 'Microsoft Corporation',
-    price: 378.85,
-    change: 4.22,
-    changePercent: 1.13,
-    market: 'US',
-    currency: 'USD',
-    volume: 18765432,
-    marketCap: 2800000000000,
-    high: 380.50,
-    low: 375.20,
-    open: 376.10,
-    previousClose: 374.63,
-    dayHigh: 380.50,
-    dayLow: 375.20,
-    weekHigh52: 384.30,
-    weekLow52: 309.45
-  },
-  'TSLA': {
-    symbol: 'TSLA',
-    name: 'Tesla, Inc.',
-    price: 248.42,
-    change: -3.18,
-    changePercent: -1.26,
-    market: 'US',
-    currency: 'USD',
-    volume: 67890123,
-    marketCap: 790000000000,
-    high: 252.75,
-    low: 246.80,
-    open: 251.30,
-    previousClose: 251.60,
-    dayHigh: 252.75,
-    dayLow: 246.80,
-    weekHigh52: 299.29,
-    weekLow52: 138.80
-  },
-  'AMZN': {
-    symbol: 'AMZN',
-    name: 'Amazon.com, Inc.',
-    price: 155.89,
-    change: 1.67,
-    changePercent: 1.08,
-    market: 'US',
-    currency: 'USD',
-    volume: 34567890,
-    marketCap: 1620000000000,
-    high: 157.25,
-    low: 154.10,
-    open: 154.75,
-    previousClose: 154.22,
-    dayHigh: 157.25,
-    dayLow: 154.10,
-    weekHigh52: 170.00,
-    weekLow52: 118.35
-  },
-  'NVDA': {
-    symbol: 'NVDA',
-    name: 'NVIDIA Corporation',
-    price: 875.28,
-    change: 12.45,
-    changePercent: 1.44,
-    market: 'US',
-    currency: 'USD',
-    volume: 45123678,
-    marketCap: 2150000000000,
-    high: 880.50,
-    low: 865.20,
-    open: 870.10,
-    previousClose: 862.83,
-    dayHigh: 880.50,
-    dayLow: 865.20,
-    weekHigh52: 950.02,
-    weekLow52: 200.26
-  },
-  'META': {
-    symbol: 'META',
-    name: 'Meta Platforms, Inc.',
-    price: 484.20,
-    change: -2.85,
-    changePercent: -0.58,
-    market: 'US',
-    currency: 'USD',
-    volume: 12345678,
-    marketCap: 1230000000000,
-    high: 488.75,
-    low: 482.30,
-    open: 486.50,
-    previousClose: 487.05,
-    dayHigh: 488.75,
-    dayLow: 482.30,
-    weekHigh52: 531.49,
-    weekLow52: 274.39
-  },
-  'NFLX': {
-    symbol: 'NFLX',
-    name: 'Netflix, Inc.',
-    price: 641.34,
-    change: 8.92,
-    changePercent: 1.41,
-    market: 'US',
-    currency: 'USD',
-    volume: 8765432,
-    marketCap: 275000000000,
-    high: 645.80,
-    low: 635.20,
-    open: 638.10,
-    previousClose: 632.42,
-    dayHigh: 645.80,
-    dayLow: 635.20,
-    weekHigh52: 700.99,
-    weekLow52: 344.73
-  }
-}
 class EnhancedStockApiService {
   private cache = new Map<string, { data: any; timestamp: number }>()
   private historicalCache = new Map<string, { data: HistoricalData[]; timestamp: number }>()
@@ -243,109 +64,71 @@ class EnhancedStockApiService {
   // WebSocket connections for real-time data
   private wsConnections = new Map<string, WebSocket>()
   private subscribers = new Map<string, Set<(data: StockData) => void>>()
+  private updateIntervals = new Map<string, NodeJS.Timeout>()
 
   constructor() {
     this.initializeRealTimeConnections()
   }
 
   private initializeRealTimeConnections() {
-    // Initialize WebSocket connections for real-time data
-    // This would connect to actual WebSocket endpoints from brokers
-    console.log('Initializing real-time data connections...')
+    console.log('Initializing Yahoo Finance real-time data connections...')
   }
 
-  // Subscribe to real-time updates
-  subscribeToRealTimeUpdates(symbol: string, callback: (data: StockData) => void) {
+  // Subscribe to real-time updates with custom intervals
+  subscribeToRealTimeUpdates(symbol: string, callback: (data: StockData) => void, intervalMinutes: number = 15) {
     if (!this.subscribers.has(symbol)) {
       this.subscribers.set(symbol, new Set())
     }
     this.subscribers.get(symbol)!.add(callback)
     
-    // Start WebSocket connection if not exists
-    this.startRealTimeConnection(symbol)
+    // Start real-time connection with specified interval
+    this.startRealTimeConnection(symbol, intervalMinutes)
   }
 
-  private startRealTimeConnection(symbol: string) {
-    if (this.wsConnections.has(symbol)) return
-
-    // For demo purposes, simulate real-time updates
-    const interval = setInterval(() => {
-      this.simulateRealTimeUpdate(symbol)
-    }, 1000) // Update every second
-
-    // Store interval reference (in real implementation, this would be WebSocket)
-    this.wsConnections.set(symbol, interval as any)
-  }
-
-  private simulateRealTimeUpdate(symbol: string) {
-    const subscribers = this.subscribers.get(symbol)
-    if (!subscribers || subscribers.size === 0) return
-
-    // Get cached data and simulate small price movements
-    const cached = this.cache.get(symbol)
-    if (!cached) return
-
-    const basePrice = cached.data.price
-    const volatility = 0.002 // 0.2% volatility
-    const randomChange = (Math.random() - 0.5) * volatility
-    const newPrice = basePrice * (1 + randomChange)
-    const change = newPrice - cached.data.previousClose
-    const changePercent = (change / cached.data.previousClose) * 100
-
-    const updatedData: StockData = {
-      ...cached.data,
-      price: Number(newPrice.toFixed(2)),
-      change: Number(change.toFixed(2)),
-      changePercent: Number(changePercent.toFixed(2))
+  private startRealTimeConnection(symbol: string, intervalMinutes: number) {
+    // Clear existing interval if any
+    if (this.updateIntervals.has(symbol)) {
+      clearInterval(this.updateIntervals.get(symbol)!)
     }
 
-    // Update cache
-    this.cache.set(symbol, { data: updatedData, timestamp: Date.now() })
+    // Set up new interval
+    const intervalMs = intervalMinutes * 60 * 1000
+    const interval = setInterval(async () => {
+      try {
+        const data = await this.fetchRealTimeStockData(symbol)
+        if (data) {
+          const subscribers = this.subscribers.get(symbol)
+          if (subscribers) {
+            subscribers.forEach(callback => callback(data))
+          }
+        }
+      } catch (error) {
+        console.error(`Error updating ${symbol}:`, error)
+      }
+    }, intervalMs)
 
-    // Notify subscribers
-    subscribers.forEach(callback => callback(updatedData))
+    this.updateIntervals.set(symbol, interval)
+    
+    // Initial fetch
+    this.fetchRealTimeStockData(symbol).then(data => {
+      if (data) {
+        const subscribers = this.subscribers.get(symbol)
+        if (subscribers) {
+          subscribers.forEach(callback => callback(data))
+        }
+      }
+    })
   }
 
   async fetchRealTimeStockData(symbol: string): Promise<StockData | null> {
     try {
-      let data: StockData | null = null
-      
-      // Try multiple sources for redundancy, with better error handling
-      try {
-        data = await this.fetchFromYahooFinance(symbol)
-      } catch (error) {
-        console.warn(`Yahoo Finance failed for ${symbol}:`, error instanceof Error ? error.message : 'Unknown error')
+      // Check cache first
+      const cached = this.cache.get(symbol)
+      if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+        return cached.data
       }
-      
-      if (!data) {
-        try {
-          data = await this.fetchFromAlphaVantage(symbol)
-        } catch (error) {
-          console.warn(`Alpha Vantage failed for ${symbol}:`, error instanceof Error ? error.message : 'Unknown error')
-        }
-      }
-      
-      if (!data) {
-        try {
-          data = await this.fetchFromFinnhub(symbol)
-        } catch (error) {
-          console.warn(`Finnhub failed for ${symbol}:`, error instanceof Error ? error.message : 'Unknown error')
-        }
-      }
-      
-      if (!data) {
-        try {
-          data = await this.fetchFromTwelveData(symbol)
-        } catch (error) {
-          console.warn(`Twelve Data failed for ${symbol}:`, error instanceof Error ? error.message : 'Unknown error')
-        }
-      }
-      
-      // Fallback to mock data if all APIs fail
-      if (!data) {
-        console.warn(`All APIs failed for ${symbol}, using mock data`)
-        data = this.getMockData(symbol)
-      }
+
+      const data = await this.fetchFromYahooFinance(symbol)
       
       if (data) {
         this.cache.set(symbol, { data, timestamp: Date.now() })
@@ -355,65 +138,16 @@ class EnhancedStockApiService {
       return null
     } catch (error) {
       console.error(`Error fetching real-time data for ${symbol}:`, error)
-      // Return mock data as final fallback
-      return this.getMockData(symbol)
+      return null
     }
   }
 
-  private getMockData(symbol: string): StockData | null {
-    // Check if we have mock data for this symbol
-    if (MOCK_STOCK_DATA[symbol]) {
-      const mockData = { ...MOCK_STOCK_DATA[symbol] }
-      
-      // Add some random variation to make it look more realistic
-      const variation = (Math.random() - 0.5) * 0.02 // ±1% variation
-      const newPrice = mockData.price * (1 + variation)
-      const change = newPrice - mockData.previousClose
-      const changePercent = (change / mockData.previousClose) * 100
-      
-      mockData.price = Number(newPrice.toFixed(2))
-      mockData.change = Number(change.toFixed(2))
-      mockData.changePercent = Number(changePercent.toFixed(2))
-      
-      return mockData
-    }
-    
-    // Generate generic mock data for unknown symbols
-    const basePrice = 100 + Math.random() * 400 // Random price between 100-500
-    const change = (Math.random() - 0.5) * 10 // Random change ±5
-    const changePercent = (change / basePrice) * 100
-    
-    return {
-      symbol,
-      name: `${symbol} Corporation`,
-      price: Number(basePrice.toFixed(2)),
-      change: Number(change.toFixed(2)),
-      changePercent: Number(changePercent.toFixed(2)),
-      market: this.determineMarket(symbol),
-      currency: this.determineMarket(symbol) === 'IN' ? 'INR' : 'USD',
-      volume: Math.floor(Math.random() * 50000000),
-      marketCap: Math.floor(Math.random() * 1000000000000),
-      high: Number((basePrice * 1.02).toFixed(2)),
-      low: Number((basePrice * 0.98).toFixed(2)),
-      open: Number((basePrice * 0.995).toFixed(2)),
-      previousClose: Number((basePrice - change).toFixed(2)),
-      dayHigh: Number((basePrice * 1.02).toFixed(2)),
-      dayLow: Number((basePrice * 0.98).toFixed(2)),
-      weekHigh52: Number((basePrice * 1.5).toFixed(2)),
-      weekLow52: Number((basePrice * 0.7).toFixed(2))
-    }
-  }
   private async fetchFromYahooFinance(symbol: string): Promise<StockData | null> {
     try {
-      // Skip Yahoo Finance if we know it will fail due to CORS
-      if (typeof window !== 'undefined') {
-        throw new Error('Yahoo Finance API blocked by CORS in browser')
-      }
-      
-      const response = await axios.get(`${API_ENDPOINTS.YAHOO.base}/${symbol}`, {
-        timeout: 5000,
+      const response = await axios.get(`${YAHOO_FINANCE_API.quote}/${symbol}`, {
+        timeout: 10000,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
       })
 
@@ -454,137 +188,8 @@ class EnhancedStockApiService {
     }
   }
 
-  private async fetchFromAlphaVantage(symbol: string): Promise<StockData | null> {
-    try {
-      // Check if we have a valid API key
-      if (API_ENDPOINTS.ALPHA_VANTAGE.key === 'demo') {
-        throw new Error('Alpha Vantage requires a valid API key')
-      }
-      
-      const response = await axios.get(API_ENDPOINTS.ALPHA_VANTAGE.base, {
-        params: {
-          function: 'GLOBAL_QUOTE',
-          symbol: symbol,
-          apikey: API_ENDPOINTS.ALPHA_VANTAGE.key
-        },
-        timeout: 5000
-      })
-
-      const quote = response.data['Global Quote']
-      if (!quote) return null
-
-      const currentPrice = parseFloat(quote['05. price'])
-      const change = parseFloat(quote['09. change'])
-      const changePercent = parseFloat(quote['10. change percent'].replace('%', ''))
-
-      return {
-        symbol: quote['01. symbol'],
-        name: quote['01. symbol'],
-        price: Number(currentPrice.toFixed(2)),
-        change: Number(change.toFixed(2)),
-        changePercent: Number(changePercent.toFixed(2)),
-        market: this.determineMarket(symbol),
-        currency: this.determineMarket(symbol) === 'IN' ? 'INR' : 'USD',
-        volume: parseInt(quote['06. volume']),
-        high: parseFloat(quote['03. high']),
-        low: parseFloat(quote['04. low']),
-        open: parseFloat(quote['02. open']),
-        previousClose: parseFloat(quote['08. previous close'])
-      }
-    } catch (error) {
-      throw new Error(`Alpha Vantage API error: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-  }
-
-  private async fetchFromFinnhub(symbol: string): Promise<StockData | null> {
-    try {
-      // Check if we have a valid API key
-      if (API_ENDPOINTS.FINNHUB.key === 'demo') {
-        throw new Error('Finnhub requires a valid API key')
-      }
-      
-      const [quoteResponse, profileResponse] = await Promise.all([
-        axios.get(`${API_ENDPOINTS.FINNHUB.base}/quote`, {
-          params: { symbol, token: API_ENDPOINTS.FINNHUB.key },
-          timeout: 5000
-        }),
-        axios.get(`${API_ENDPOINTS.FINNHUB.base}/stock/profile2`, {
-          params: { symbol, token: API_ENDPOINTS.FINNHUB.key },
-          timeout: 5000
-        })
-      ])
-
-      const quote = quoteResponse.data
-      const profile = profileResponse.data
-
-      if (!quote.c) return null
-
-      const currentPrice = quote.c
-      const change = quote.d
-      const changePercent = quote.dp
-
-      return {
-        symbol: symbol,
-        name: profile.name || symbol,
-        price: Number(currentPrice.toFixed(2)),
-        change: Number(change.toFixed(2)),
-        changePercent: Number(changePercent.toFixed(2)),
-        market: this.determineMarket(symbol),
-        currency: profile.currency || (this.determineMarket(symbol) === 'IN' ? 'INR' : 'USD'),
-        high: quote.h,
-        low: quote.l,
-        open: quote.o,
-        previousClose: quote.pc,
-        marketCap: profile.marketCapitalization
-      }
-    } catch (error) {
-      throw new Error(`Finnhub API error: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-  }
-
-  private async fetchFromTwelveData(symbol: string): Promise<StockData | null> {
-    try {
-      // Check if we have a valid API key
-      if (API_ENDPOINTS.TWELVE_DATA.key === 'demo') {
-        throw new Error('Twelve Data requires a valid API key')
-      }
-      
-      const response = await axios.get(`${API_ENDPOINTS.TWELVE_DATA.base}/quote`, {
-        params: {
-          symbol: symbol,
-          apikey: API_ENDPOINTS.TWELVE_DATA.key
-        },
-        timeout: 5000
-      })
-
-      const data = response.data
-      if (!data.close) return null
-
-      const currentPrice = parseFloat(data.close)
-      const change = parseFloat(data.change)
-      const changePercent = parseFloat(data.percent_change)
-
-      return {
-        symbol: data.symbol,
-        name: data.name || data.symbol,
-        price: Number(currentPrice.toFixed(2)),
-        change: Number(change.toFixed(2)),
-        changePercent: Number(changePercent.toFixed(2)),
-        market: this.determineMarket(symbol),
-        currency: this.determineMarket(symbol) === 'IN' ? 'INR' : 'USD',
-        high: parseFloat(data.high),
-        low: parseFloat(data.low),
-        open: parseFloat(data.open),
-        previousClose: parseFloat(data.previous_close),
-        volume: parseInt(data.volume)
-      }
-    } catch (error) {
-      throw new Error(`Twelve Data API error: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-  }
-
-  async fetchHistoricalData(symbol: string, period: string = '1y'): Promise<HistoricalData[]> {
-    const cacheKey = `${symbol}_${period}`
+  async fetchHistoricalData(symbol: string, period: string = '1d', interval: string = '15m'): Promise<HistoricalData[]> {
+    const cacheKey = `${symbol}_${period}_${interval}`
     const cached = this.historicalCache.get(cacheKey)
     
     if (cached && Date.now() - cached.timestamp < this.HISTORICAL_CACHE_DURATION) {
@@ -592,18 +197,10 @@ class EnhancedStockApiService {
     }
 
     try {
-      // Try Yahoo Finance for historical data
-      const data = await this.fetchHistoricalFromYahoo(symbol, period)
+      const data = await this.fetchHistoricalFromYahoo(symbol, period, interval)
       if (data && data.length > 0) {
         this.historicalCache.set(cacheKey, { data, timestamp: Date.now() })
         return data
-      }
-      
-      // Fallback to Alpha Vantage
-      const alphaData = await this.fetchHistoricalFromAlphaVantage(symbol)
-      if (alphaData && alphaData.length > 0) {
-        this.historicalCache.set(cacheKey, { data: alphaData, timestamp: Date.now() })
-        return alphaData
       }
       
       return []
@@ -613,20 +210,19 @@ class EnhancedStockApiService {
     }
   }
 
-  private async fetchHistoricalFromYahoo(symbol: string, period: string): Promise<HistoricalData[]> {
+  private async fetchHistoricalFromYahoo(symbol: string, period: string, interval: string): Promise<HistoricalData[]> {
     try {
-      // Skip Yahoo Finance if we know it will fail due to CORS in browser
-      if (typeof window !== 'undefined') {
-        console.warn('Yahoo Finance historical data API blocked by CORS in browser, falling back to other sources')
-        return []
-      }
-      
-      const response = await axios.get(`${API_ENDPOINTS.YAHOO.base}/${symbol}`, {
+      const response = await axios.get(`${YAHOO_FINANCE_API.quote}/${symbol}`, {
         params: {
           range: period,
-          interval: '1d'
+          interval: interval,
+          includePrePost: true,
+          events: 'div%2Csplit'
         },
-        timeout: 10000
+        timeout: 15000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
       })
 
       const result = response.data?.chart?.result?.[0]
@@ -646,37 +242,7 @@ class EnhancedStockApiService {
         volume: quotes.volume[index] || 0
       })).filter((item: HistoricalData) => item.close > 0)
     } catch (error) {
-      console.warn('Yahoo historical data error:', error instanceof Error ? error.message : 'Unknown error')
-      return []
-    }
-  }
-
-  private async fetchHistoricalFromAlphaVantage(symbol: string): Promise<HistoricalData[]> {
-    try {
-      const response = await axios.get(API_ENDPOINTS.ALPHA_VANTAGE.base, {
-        params: {
-          function: 'TIME_SERIES_DAILY',
-          symbol: symbol,
-          apikey: API_ENDPOINTS.ALPHA_VANTAGE.key,
-          outputsize: 'full'
-        },
-        timeout: 10000
-      })
-
-      const timeSeries = response.data['Time Series (Daily)']
-      if (!timeSeries) return []
-
-      return Object.entries(timeSeries).map(([date, data]: [string, any]) => ({
-        timestamp: new Date(date).getTime(),
-        open: parseFloat(data['1. open']),
-        high: parseFloat(data['2. high']),
-        low: parseFloat(data['3. low']),
-        close: parseFloat(data['4. close']),
-        volume: parseInt(data['5. volume'])
-      })).sort((a, b) => a.timestamp - b.timestamp)
-    } catch (error) {
-      console.error('Alpha Vantage historical data error:', error)
-      return []
+      throw new Error(`Yahoo historical data error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -1091,8 +657,20 @@ class EnhancedStockApiService {
       .map(result => result.value)
   }
 
+  // Update subscription interval
+  updateSubscriptionInterval(symbol: string, intervalMinutes: number) {
+    if (this.subscribers.has(symbol)) {
+      this.startRealTimeConnection(symbol, intervalMinutes)
+    }
+  }
+
   // Cleanup method
   cleanup() {
+    this.updateIntervals.forEach((interval) => {
+      clearInterval(interval)
+    })
+    this.updateIntervals.clear()
+    
     this.wsConnections.forEach((connection, symbol) => {
       if (typeof connection === 'number') {
         clearInterval(connection)

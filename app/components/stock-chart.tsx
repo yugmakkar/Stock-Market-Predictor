@@ -3,10 +3,9 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from "recharts"
-import { Brain, Activity, Target, Sparkles, TrendingUp, TrendingDown, AlertCircle } from "lucide-react"
+import { Brain, Activity, Target, Sparkles, TrendingUp, TrendingDown, AlertCircle, Clock } from "lucide-react"
 import { stockApiService, type HistoricalData } from "../services/stockApi"
 import { Badge } from "@/components/ui/badge"
 
@@ -38,28 +37,45 @@ interface StockChartProps {
 export default function StockChart({ stock, onPredictionUpdate }: StockChartProps) {
   const [chartData, setChartData] = useState<ChartData[]>([])
   const [historicalData, setHistoricalData] = useState<HistoricalData[]>([])
-  const [timeUnit, setTimeUnit] = useState<string>("minutes")
-  const [timeValue, setTimeValue] = useState<string>("30")
+  const [updateInterval, setUpdateInterval] = useState<number>(15)
+  const [timeRange, setTimeRange] = useState<string>("1d")
   const [isGenerating, setIsGenerating] = useState(false)
   const [showPredictions, setShowPredictions] = useState(false)
   const [accuracy, setAccuracy] = useState<number>(0)
   const [predictionSignals, setPredictionSignals] = useState<string[]>([])
   const [isLoadingHistorical, setIsLoadingHistorical] = useState(false)
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date())
 
   useEffect(() => {
     loadHistoricalData()
     setShowPredictions(false)
-  }, [stock.symbol])
+  }, [stock.symbol, timeRange])
+
+  useEffect(() => {
+    // Update subscription interval when changed
+    stockApiService.updateSubscriptionInterval(stock.symbol, updateInterval)
+  }, [stock.symbol, updateInterval])
 
   const loadHistoricalData = async () => {
     setIsLoadingHistorical(true)
     try {
-      const historical = await stockApiService.fetchHistoricalData(stock.symbol, '1m')
+      const intervalMap: { [key: string]: string } = {
+        '1d': '15m',
+        '5d': '30m', 
+        '1mo': '1h',
+        '3mo': '1d',
+        '1y': '1d'
+      }
+      
+      const interval = intervalMap[timeRange] || '15m'
+      const historical = await stockApiService.fetchHistoricalData(stock.symbol, timeRange, interval)
       setHistoricalData(historical)
       
       // Convert historical data to chart format
-      const chartData = historical.slice(-50).map((item, index) => ({
-        time: new Date(item.timestamp).toLocaleTimeString(),
+      const chartData = historical.slice(-100).map((item, index) => ({
+        time: timeRange === '1d' ? 
+          new Date(item.timestamp).toLocaleTimeString() : 
+          new Date(item.timestamp).toLocaleDateString(),
         price: item.close,
         volume: item.volume
       }))
@@ -68,7 +84,7 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
     } catch (error) {
       console.error('Error loading historical data:', error)
       // Fallback to simulated data
-      initializeWithSimulatedData()
+      // initializeWithSimulatedData()
     } finally {
       setIsLoadingHistorical(false)
     }
@@ -97,12 +113,15 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
   useEffect(() => {
     // Subscribe to real-time updates
     const handleRealTimeUpdate = (updatedStock: any) => {
+      setLastUpdateTime(new Date())
       setChartData((prevData) => {
         const newData = [...prevData]
         const now = new Date()
 
         const newPoint: ChartData = {
-          time: now.toLocaleTimeString(),
+          time: timeRange === '1d' ? 
+            now.toLocaleTimeString() : 
+            now.toLocaleDateString(),
           price: updatedStock.price,
           volume: updatedStock.volume || Math.floor(Math.random() * 1000000) + 100000
         }
@@ -117,7 +136,7 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
       })
     }
 
-    stockApiService.subscribeToRealTimeUpdates(stock.symbol, handleRealTimeUpdate)
+    stockApiService.subscribeToRealTimeUpdates(stock.symbol, handleRealTimeUpdate, updateInterval)
 
     // Fallback: Add new data point every 5 seconds for demo
     const interval = setInterval(() => {
@@ -132,7 +151,9 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
         const newPrice = lastPrice * (1 + change)
 
         const newPoint: ChartData = {
-          time: now.toLocaleTimeString(),
+          time: timeRange === '1d' ? 
+            now.toLocaleTimeString() : 
+            now.toLocaleDateString(),
           price: Number(newPrice.toFixed(2)),
           volume: Math.floor(Math.random() * 1000000) + 100000
         }
@@ -148,7 +169,7 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
     }, 5000)
 
     return () => clearInterval(interval)
-  }, [stock.symbol])
+  }, [stock.symbol, updateInterval, timeRange])
 
   const generatePredictions = async () => {
     setIsGenerating(true)
@@ -158,7 +179,7 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
 
     try {
       const currentPrice = stock.price
-      const timeInMinutes = convertToMinutes(Number.parseInt(timeValue), timeUnit)
+      const timeInMinutes = updateInterval
       
       // Use historical data if available, otherwise use chart data
       const dataForPrediction = historicalData.length > 0 ? historicalData : 
@@ -206,7 +227,9 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
         predictions.forEach((predicted, index) => {
           const futureTime = new Date(currentTime + (index + 1) * (timeInMinutes * 60000 / predictionPoints))
           updatedData.push({
-            time: futureTime.toLocaleTimeString(),
+            time: timeRange === '1d' ? 
+              futureTime.toLocaleTimeString() : 
+              futureTime.toLocaleDateString(),
             price: currentPrice,
             predicted: Number(predicted.toFixed(2)),
           })
@@ -233,19 +256,6 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
     } finally {
       setIsGenerating(false)
     }
-  }
-
-  const convertToMinutes = (value: number, unit: string): number => {
-    const conversions: { [key: string]: number } = {
-      seconds: value / 60,
-      minutes: value,
-      hours: value * 60,
-      days: value * 24 * 60,
-      weeks: value * 7 * 24 * 60,
-      months: value * 30 * 24 * 60,
-      years: value * 365 * 24 * 60,
-    }
-    return conversions[unit] || value
   }
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -275,7 +285,7 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           {isLoadingHistorical && (
             <div className="flex items-center gap-2 text-yellow-400">
               <AlertCircle className="h-4 w-4" />
@@ -283,30 +293,32 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
             </div>
           )}
             <div>
-              <label className="block text-sm font-medium mb-2 text-white">Time Value</label>
-              <Input
-                type="number"
-                value={timeValue}
-                onChange={(e) => setTimeValue(e.target.value)}
-                min="1"
-                max="1000"
-                className="bg-slate-800/50 border-slate-600 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2 text-white">Time Unit</label>
-              <Select value={timeUnit} onValueChange={setTimeUnit}>
+              <label className="block text-sm font-medium mb-2 text-white">Update Interval</label>
+              <Select value={updateInterval.toString()} onValueChange={(value) => setUpdateInterval(Number(value))}>
                 <SelectTrigger className="bg-slate-800/50 border-slate-600 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-600">
-                  <SelectItem value="seconds">Seconds</SelectItem>
-                  <SelectItem value="minutes">Minutes</SelectItem>
-                  <SelectItem value="hours">Hours</SelectItem>
-                  <SelectItem value="days">Days</SelectItem>
-                  <SelectItem value="weeks">Weeks</SelectItem>
-                  <SelectItem value="months">Months</SelectItem>
-                  <SelectItem value="years">Years</SelectItem>
+                  <SelectItem value="15">15 minutes</SelectItem>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="1440">24 hours (1 day)</SelectItem>
+                  <SelectItem value="14400">10 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2 text-white">Time Range</label>
+              <Select value={timeRange} onValueChange={setTimeRange}>
+                <SelectTrigger className="bg-slate-800/50 border-slate-600 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-600">
+                  <SelectItem value="1d">1 Day</SelectItem>
+                  <SelectItem value="5d">5 Days</SelectItem>
+                  <SelectItem value="1mo">1 Month</SelectItem>
+                  <SelectItem value="3mo">3 Months</SelectItem>
+                  <SelectItem value="1y">1 Year</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -336,11 +348,12 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
                   <Target className="h-4 w-4 text-green-400" />
                   <span className="text-green-400 font-medium">Accuracy: {accuracy.toFixed(1)}%</span>
                 </div>
-                <div className="text-gray-400 text-sm">
-                  Range: {timeValue} {timeUnit}
-                </div>
                 <div className="text-gray-400 text-xs mt-1">
                   Data Points: {historicalData.length > 0 ? historicalData.length : chartData.length}
+                </div>
+                <div className="flex items-center gap-2 text-gray-400 text-xs mt-1">
+                  <Clock className="h-3 w-3" />
+                  <span>Last Update: {lastUpdateTime.toLocaleTimeString()}</span>
                 </div>
               </div>
             )}
@@ -376,7 +389,7 @@ export default function StockChart({ stock, onPredictionUpdate }: StockChartProp
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white">
             <Activity className="h-5 w-5 text-green-400" />
-            Real-time Price Chart with AI Predictions
+            Real-time Price Chart with AI Predictions ({updateInterval}min intervals)
           </CardTitle>
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
