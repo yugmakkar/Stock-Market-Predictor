@@ -144,11 +144,8 @@ class EnhancedStockApiService {
 
   private async fetchFromYahooFinance(symbol: string): Promise<StockData | null> {
     try {
-      const response = await axios.get(`${YAHOO_FINANCE_API.quote}/${symbol}`, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+      const response = await axios.get(`/api/stock/quote/${symbol}`, {
+        timeout: 10000
       })
 
       const result = response.data?.chart?.result?.[0]
@@ -212,17 +209,15 @@ class EnhancedStockApiService {
 
   private async fetchHistoricalFromYahoo(symbol: string, period: string, interval: string): Promise<HistoricalData[]> {
     try {
-      const response = await axios.get(`${YAHOO_FINANCE_API.quote}/${symbol}`, {
-        params: {
-          range: period,
-          interval: interval,
-          includePrePost: true,
-          events: 'div%2Csplit'
-        },
-        timeout: 15000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+      const params = new URLSearchParams({
+        range: period,
+        interval: interval,
+        includePrePost: 'true',
+        events: 'div%2Csplit'
+      })
+      
+      const response = await axios.get(`/api/stock/historical/${symbol}?${params.toString()}`, {
+        timeout: 15000
       })
 
       const result = response.data?.chart?.result?.[0]
