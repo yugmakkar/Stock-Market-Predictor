@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import StockChart from "./components/stock-chart"
 import StockList from "./components/stock-list"
-import AnimatedBackground from "./components/animated-background"
+import AIBackground from "./components/ai-background"
 import { TrendingUp, TrendingDown, Activity, Brain, Globe, IndianRupee, DollarSign, AlertTriangle, RefreshCw, Wifi, WifiOff } from "lucide-react"
 
 interface Stock extends StockData {
@@ -170,7 +170,7 @@ export default function StockPredictor() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
-        <AnimatedBackground />
+        <AIBackground />
         <div className="relative z-10 container mx-auto p-6 flex items-center justify-center min-h-screen">
           <div className="text-center">
             <Brain className="h-16 w-16 text-blue-400 mx-auto mb-4 animate-pulse" />
@@ -191,7 +191,7 @@ export default function StockPredictor() {
   if (!selectedStock) {
     return (
       <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
-        <AnimatedBackground />
+        <AIBackground />
         <div className="relative z-10 container mx-auto p-6 flex items-center justify-center min-h-screen">
           <div className="text-center">
             <AlertTriangle className="h-16 w-16 text-yellow-400 mx-auto mb-4" />
@@ -209,7 +209,7 @@ export default function StockPredictor() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
-      <AnimatedBackground />
+      <AIBackground />
 
       <div className="relative z-10 container mx-auto p-6">
         {/* Centered Header */}
