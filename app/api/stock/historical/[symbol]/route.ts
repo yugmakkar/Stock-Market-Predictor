@@ -5,7 +5,8 @@ export async function GET(
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   try {
-    const { symbol } = await params
+    const resolvedParams = await params
+    const { symbol } = resolvedParams
     const { searchParams } = new URL(request.url)
     
     // Build Yahoo Finance API URL
