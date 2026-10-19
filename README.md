@@ -84,6 +84,27 @@ Open http://localhost:3000.
 - `DATA_MODE=demo`: serves deterministic synthetic data, clearly flagged in the UI as
   *"Demo data — not live market prices."* Used for offline development and the e2e tests.
 
+## Deploy it free (Vercel)
+
+This app has server-side routes (prices, news, FX), so it needs a host that runs
+Next.js — not static-only GitHub Pages. **Vercel's free Hobby tier** is the natural fit
+and redeploys automatically on every push.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
+
+1. Sign in at [vercel.com](https://vercel.com) with your **GitHub** account (free).
+2. **Add New… → Project → Import** this repository.
+3. Leave every setting at its default — Vercel detects Next.js automatically — and click
+   **Deploy**. The site goes live at `https://<project>.vercel.app`.
+4. **Auto-updates are on by default:** Vercel watches the linked repo, so every push to
+   `main` triggers a fresh production deploy. No extra configuration.
+
+**Data mode on the host:** the app defaults to `DATA_MODE=live` and fetches real NSE data
+server-side. If the host's IP is ever rate-limited by Yahoo and quotes stop loading, add
+an environment variable `DATA_MODE=demo` under **Project → Settings → Environment
+Variables** and redeploy — the public site then always renders with the clearly-flagged
+synthetic sample data.
+
 ## Scripts
 
 | Command | Purpose |
