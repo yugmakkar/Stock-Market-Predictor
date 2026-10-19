@@ -39,10 +39,15 @@ currency — all from **free, public data with no API keys, logins, or payments*
 |------|--------|
 | Prices & history | Yahoo Finance public `chart` endpoint (`*.NS` symbols) |
 | News | Google News RSS (`hl=en-IN`) |
-| FX rates | Frankfurter (European Central Bank) with a static fallback |
+| FX rates | Frankfurter (European Central Bank); AED derived from its USD peg; static fallback |
 
 All third-party data is fetched **server-side** in Next.js route handlers (never from
-the browser), which avoids CORS issues and keeps requests off client IPs.
+the browser), which avoids CORS issues and keeps requests off client IPs. A small
+in-memory TTL cache (history 60s, quotes 45s, news 10m, FX 1h) coalesces repeated
+requests so a busy page makes at most one upstream call per window — this is what
+protects against Yahoo rate limits (Next's own fetch cache is bypassed on
+`force-dynamic` routes). While the market is open, the current price auto-refreshes
+about once a minute when the tab is visible.
 
 ## How the model works
 
@@ -100,8 +105,17 @@ Playwright.
 This repository was built and verified in an environment with **no outbound access to
 Yahoo/Google**, so the live data path was validated against the documented API schema
 and exercised through unit tests and demo mode — **but not against the live endpoints**.
-On first deploy, confirm live quotes load for a couple of symbols; if Yahoo rate-limits
-your host, the built-in server-side caching (`revalidate`) and the error state will keep
+**First-deploy checklist:**
+
+1. Load 2–3 symbols (e.g. `RELIANCE.NS`, `TCS.NS`) and confirm quotes appear.
+2. Compare the day's change against the NSE website — it should match.
+3. Check the FX rate label in the currency menu reads *"ECB via Frankfurter…"* (not the
+   static fallback).
+4. If any seed symbol 404s, it was likely renamed by a corporate action (e.g. a
+   demerger) — update it in `lib/stocks.ts`. The constituent list is a curated browse
+   set, not a live index feed.
+
+If Yahoo rate-limits your host, the in-memory TTL cache and the clear error state keep
 the app usable.
 
 ---

@@ -4,6 +4,7 @@
 import type { Candle, NewsItem } from "../types"
 import { scoreHeadline } from "../sentiment"
 import { seedBySymbol } from "../stocks"
+import { isTradingDay } from "../trading-calendar"
 
 // Mulberry32 — a tiny deterministic PRNG. Used only for fixture generation.
 function mulberry32(seed: number): () => number {
@@ -34,44 +35,47 @@ function basePrice(symbol: string): number {
   return Math.round(tier * (0.7 + rand() * 0.6))
 }
 
-/** Generate `days` daily candles ending today (UTC), deterministic per symbol. */
-export function demoCandles(symbol: string, days = 180): Candle[] {
+/** The last `count` NSE trading days up to and including today, ascending. */
+function recentTradingDays(count: number, now = new Date()): number[] {
+  const out: number[] = []
+  const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  while (out.length < count) {
+    if (isTradingDay(cursor)) out.push(cursor.getTime())
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
+  }
+  return out.reverse()
+}
+
+/** Generate `days` daily candles ending on the most recent trading day. */
+export function demoCandles(symbol: string, days = 180, now = new Date()): Candle[] {
   const seed = hashSymbol(symbol)
   const rand = mulberry32(seed)
   let price = basePrice(symbol)
   const driftPerDay = (rand() - 0.45) * 0.0012 // mild symbol-specific trend
   const vol = 0.012 + rand() * 0.014 // 1.2%–2.6% daily vol
+  const dates = recentTradingDays(days, now)
   const candles: Candle[] = []
 
-  const today = new Date()
-  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
-  start.setUTCDate(start.getUTCDate() - Math.ceil(days * 1.5))
-
-  const cursor = new Date(start)
-  while (candles.length < days) {
-    const dow = cursor.getUTCDay()
-    if (dow !== 0 && dow !== 6) {
-      // Box-Muller normal from two uniforms.
-      const u1 = Math.max(1e-9, rand())
-      const u2 = rand()
-      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
-      const ret = driftPerDay + vol * z
-      const open = price
-      const close = Math.max(1, open * Math.exp(ret))
-      const high = Math.max(open, close) * (1 + rand() * 0.006)
-      const low = Math.min(open, close) * (1 - rand() * 0.006)
-      const volume = Math.round(500000 + rand() * 4500000)
-      candles.push({
-        t: cursor.getTime(),
-        open: round2(open),
-        high: round2(high),
-        low: round2(low),
-        close: round2(close),
-        volume,
-      })
-      price = close
-    }
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  for (const t of dates) {
+    // Box-Muller normal from two uniforms.
+    const u1 = Math.max(1e-9, rand())
+    const u2 = rand()
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+    const ret = driftPerDay + vol * z
+    const open = price
+    const close = Math.max(1, open * Math.exp(ret))
+    const high = Math.max(open, close) * (1 + rand() * 0.006)
+    const low = Math.min(open, close) * (1 - rand() * 0.006)
+    const volume = Math.round(500000 + rand() * 4500000)
+    candles.push({
+      t,
+      open: round2(open),
+      high: round2(high),
+      low: round2(low),
+      close: round2(close),
+      volume,
+    })
+    price = close
   }
   return candles
 }

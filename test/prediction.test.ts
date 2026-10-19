@@ -86,6 +86,24 @@ describe("predict", () => {
   })
 })
 
+describe("demo data recency", () => {
+  it("ends on a recent trading day (within the last week)", () => {
+    const candles = demoCandles("REC.NS", 180)
+    const last = candles[candles.length - 1].t
+    const ageDays = (Date.now() - last) / 86400_000
+    expect(ageDays).toBeGreaterThanOrEqual(0)
+    expect(ageDays).toBeLessThan(7)
+  })
+
+  it("projects forecast dates into the future", () => {
+    const candles = demoCandles("FUT.NS", 180)
+    const p = predict({ symbol: "FUT.NS", candles })
+    expect(p.projection[0].t).toBeGreaterThan(candles[candles.length - 1].t)
+    // The first horizon's date is after today.
+    expect(new Date(p.horizons[0].date).getTime()).toBeGreaterThan(Date.now() - 86400_000)
+  })
+})
+
 describe("backtest", () => {
   it("returns a hit rate in [0,1] with samples", () => {
     const bt = backtest(demoCandles("BT.NS", 180), 5)

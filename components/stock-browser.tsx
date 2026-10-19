@@ -38,7 +38,7 @@ export function StockBrowser({
           type="search"
           value={query}
           onChange={(e) => onQuery(e.target.value)}
-          placeholder="Search Nifty 50…"
+          placeholder="Search NSE stocks…"
           aria-label="Search stocks"
           className="w-full rounded-xl py-2.5 pl-9 pr-3 text-sm outline-none hairline"
           style={{ background: "var(--glass-bg)", color: "var(--ink)" }}

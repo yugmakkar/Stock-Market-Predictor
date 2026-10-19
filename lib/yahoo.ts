@@ -83,7 +83,13 @@ export function parseQuote(result: ChartResult): Quote {
   const candles = parseCandles(result)
   const last = candles[candles.length - 1]
   const price = m.regularMarketPrice ?? last?.close ?? 0
-  const prev = m.previousClose ?? m.chartPreviousClose ?? last?.open ?? price
+  // Prefer the prior candle's close: on a multi-month range, meta.chartPreviousClose
+  // is the close before the range START (months ago), which would make the day's
+  // "change" show the whole-range move. The second-to-last candle is yesterday.
+  const prev =
+    candles.length >= 2
+      ? candles[candles.length - 2].close
+      : (m.previousClose ?? m.chartPreviousClose ?? last?.open ?? price)
   const change = price - prev
   const seed = seedBySymbol(m.symbol)
   return {

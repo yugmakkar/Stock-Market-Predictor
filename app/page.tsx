@@ -4,11 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Activity, TriangleAlert } from "lucide-react"
 import type { DataMode, StockDetailResponse } from "@/lib/types"
 import type { SeedStock } from "@/lib/stocks"
+import { isNseOpen } from "@/lib/trading-calendar"
 import { CurrencyProvider, CurrencySelector } from "@/components/currency"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { StockBrowser } from "@/components/stock-browser"
 import { StockDetail } from "@/components/stock-detail"
 import { DemoBanner, RiskWarning } from "@/components/notices"
+
+const REFRESH_MS = 60_000
 
 export default function Page() {
   return (
@@ -26,6 +29,7 @@ function Dashboard() {
   const [detail, setDetail] = useState<StockDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null)
   const reqId = useRef(0)
 
   useEffect(() => {
@@ -41,9 +45,9 @@ function Dashboard() {
       .catch(() => setStocks([]))
   }, [])
 
-  const loadDetail = useCallback((symbol: string) => {
+  const loadDetail = useCallback((symbol: string, quiet = false) => {
     const id = ++reqId.current
-    setLoading(true)
+    if (!quiet) setLoading(true)
     setError(null)
     fetch(`/api/stock/${encodeURIComponent(symbol)}`)
       .then(async (r) => {
@@ -55,11 +59,12 @@ function Dashboard() {
         if (id !== reqId.current) return // a newer request superseded this one
         setDetail(d)
         setMode(d.mode)
+        setUpdatedAt(Date.now())
         setLoading(false)
       })
       .catch((e: Error) => {
         if (id !== reqId.current) return
-        setError(e.message)
+        if (!quiet) setError(e.message)
         setLoading(false)
       })
   }, [])
@@ -69,6 +74,20 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDetail(selected)
   }, [selected, loadDetail])
+
+  // Keep the current price fresh while the market is open and the tab is visible.
+  useEffect(() => {
+    if (mode !== "live") return
+    const tick = () => {
+      if (document.visibilityState === "visible" && isNseOpen()) loadDetail(selected, true)
+    }
+    const timer = setInterval(tick, REFRESH_MS)
+    document.addEventListener("visibilitychange", tick)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener("visibilitychange", tick)
+    }
+  }, [selected, mode, loadDetail])
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-7xl px-4 pb-16 sm:px-6">
@@ -91,6 +110,7 @@ function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <LiveStatus mode={mode} updatedAt={updatedAt} />
             <CurrencySelector />
             <ThemeToggle />
           </div>
@@ -134,6 +154,50 @@ function Dashboard() {
         </p>
       </footer>
     </div>
+  )
+}
+
+function LiveStatus({ mode, updatedAt }: { mode: DataMode; updatedAt: number | null }) {
+  const [now, setNow] = useState(0)
+  useEffect(() => {
+    // Seed the clock after mount (Date.now() is browser-only / non-deterministic).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNow(Date.now())
+    const t = setInterval(() => setNow(Date.now()), 5000)
+    return () => clearInterval(t)
+  }, [])
+
+  if (mode === "demo") {
+    return (
+      <span
+        className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:flex"
+        style={{ color: "var(--series-forecast)", background: "var(--band-weak)" }}
+      >
+        Demo
+      </span>
+    )
+  }
+
+  const open = now > 0 ? isNseOpen(new Date(now)) : false
+  const ago = updatedAt && now > 0 ? Math.round((now - updatedAt) / 1000) : null
+  const agoText = ago == null ? "" : ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`
+  return (
+    <span
+      className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:flex"
+      style={{ color: "var(--ink-2)", background: "var(--glass-bg)" }}
+      title={open ? "NSE is open — auto-refreshing" : "NSE is closed"}
+    >
+      <span
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: 7,
+          background: open ? "var(--up)" : "var(--muted)",
+          boxShadow: open ? "0 0 0 3px rgba(10,138,47,0.18)" : "none",
+        }}
+      />
+      {open ? `Live · ${agoText}` : "Market closed"}
+    </span>
   )
 }
 

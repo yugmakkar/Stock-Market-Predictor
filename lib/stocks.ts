@@ -58,6 +58,9 @@ export const NIFTY50: SeedStock[] = [
   { symbol: "LTIM.NS", name: "LTIMindtree", sector: "IT" },
   { symbol: "SHRIRAMFIN.NS", name: "Shriram Finance", sector: "Financials" },
   { symbol: "M&M.NS", name: "Mahindra & Mahindra", sector: "Auto" },
+  { symbol: "JIOFIN.NS", name: "Jio Financial Services", sector: "Financials" },
+  { symbol: "ADANIGREEN.NS", name: "Adani Green Energy", sector: "Utilities" },
+  { symbol: "DMART.NS", name: "Avenue Supermarts (DMart)", sector: "Retail" },
 ]
 
 const BY_SYMBOL = new Map(NIFTY50.map((s) => [s.symbol.toUpperCase(), s]))

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { scoreHeadline, aggregateSentiment } from "@/lib/sentiment"
 import { convertFromInr, formatMoney, FALLBACK_FX } from "@/lib/currency"
-import { isTradingDay, nextTradingDays } from "@/lib/trading-calendar"
+import { isTradingDay, nextTradingDays, isNseOpen } from "@/lib/trading-calendar"
 import { parseRss } from "@/lib/news"
 
 describe("sentiment", () => {
@@ -51,6 +51,17 @@ describe("trading calendar", () => {
   it("accepts a normal weekday", () => {
     expect(isTradingDay(new Date(Date.UTC(2025, 0, 6)))).toBe(true) // Monday
   })
+  it("knows NSE market hours (IST 09:15–15:30 on trading days)", () => {
+    // 2026-01-05 is a Monday (trading day). 10:00 IST = 04:30 UTC → open.
+    expect(isNseOpen(new Date("2026-01-05T04:30:00Z"))).toBe(true)
+    // 03:00 UTC = 08:30 IST → before open.
+    expect(isNseOpen(new Date("2026-01-05T03:00:00Z"))).toBe(false)
+    // 12:00 UTC = 17:30 IST → after close.
+    expect(isNseOpen(new Date("2026-01-05T12:00:00Z"))).toBe(false)
+    // 2026-01-26 is Republic Day (holiday) → closed even at midday.
+    expect(isNseOpen(new Date("2026-01-26T05:00:00Z"))).toBe(false)
+  })
+
   it("next trading days skips weekends/holidays and increases", () => {
     const days = nextTradingDays(new Date(Date.UTC(2025, 7, 14)), 3) // Thu before Aug 15 holiday
     expect(days).toHaveLength(3)

@@ -220,7 +220,7 @@ function HorizonRow({ h, format }: { h: HorizonForecast; format: (n: number) => 
           <div
             className="absolute inset-y-0 left-0 rounded-full"
             style={{
-              width: `${h.probUp * 100}%`,
+              width: `${probShown}%`,
               background: leansUp ? "var(--up)" : "var(--down)",
             }}
           />

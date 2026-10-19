@@ -13,6 +13,9 @@ import { getFxLive } from "./fx"
 import { FALLBACK_FX } from "./currency"
 import { demoCandles, demoNews } from "./fixtures/generate"
 import { seedBySymbol } from "./stocks"
+import { cached } from "./cache"
+
+const TTL = { quote: 45_000, history: 60_000, news: 600_000, fx: 3_600_000 }
 
 export function dataMode(): DataMode {
   return process.env.DATA_MODE === "demo" ? "demo" : "live"
@@ -45,7 +48,7 @@ function quoteFromCandles(symbol: string, candles: Candle[]): Quote {
 
 export async function getQuote(symbol: string): Promise<Quote> {
   if (dataMode() === "demo") return quoteFromCandles(symbol, demoCandles(symbol, 60))
-  return getQuoteLive(symbol)
+  return cached(`quote:${symbol}`, TTL.quote, () => getQuoteLive(symbol))
 }
 
 export async function getHistory(symbol: string): Promise<{ candles: Candle[]; quote: Quote }> {
@@ -53,22 +56,37 @@ export async function getHistory(symbol: string): Promise<{ candles: Candle[]; q
     const candles = demoCandles(symbol, 180)
     return { candles, quote: quoteFromCandles(symbol, candles) }
   }
-  return getHistoryLive(symbol)
+  return cached(`history:${symbol}`, TTL.history, () => getHistoryLive(symbol))
 }
 
 export async function getNews(symbol: string, name: string): Promise<NewsItem[]> {
-  if (dataMode() === "demo") return demoNews(symbol)
-  return getNewsLive(name)
+  if (dataMode() === "demo") return dedupeNews(demoNews(symbol))
+  return cached(`news:${symbol}`, TTL.news, async () => dedupeNews(await getNewsLive(name)))
 }
 
 export async function getFx(): Promise<FxTable> {
   if (dataMode() === "demo") {
     return { ...FALLBACK_FX, asOf: new Date().toISOString().slice(0, 10), source: "Demo rates" }
   }
-  try {
-    return await getFxLive()
-  } catch {
-    // FX failing shouldn't break the page; fall back to a static table.
-    return { ...FALLBACK_FX, asOf: new Date().toISOString().slice(0, 10), source: "static fallback" }
+  return cached("fx", TTL.fx, async () => {
+    try {
+      return await getFxLive()
+    } catch {
+      // FX failing shouldn't break the page; fall back to a static table.
+      return { ...FALLBACK_FX, asOf: new Date().toISOString().slice(0, 10), source: "static fallback" }
+    }
+  })
+}
+
+/** Remove duplicate headlines (syndicated stories repeat across outlets). */
+function dedupeNews(items: NewsItem[]): NewsItem[] {
+  const seen = new Set<string>()
+  const out: NewsItem[] = []
+  for (const n of items) {
+    const key = n.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(n)
   }
+  return out
 }

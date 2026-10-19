@@ -19,17 +19,21 @@ const NSE_HOLIDAYS: Record<number, string[]> = {
     "2025-11-05", // Guru Nanak Jayanti
     "2025-12-25", // Christmas
   ],
+  // NSE equity-segment trading holidays, 2026 (weekday closures).
   2026: [
     "2026-01-26", // Republic Day
-    "2026-03-04", // Holi
-    "2026-03-21", // Id-Ul-Fitr
+    "2026-03-03", // Holi
+    "2026-03-26", // Shri Ram Navami
     "2026-03-31", // Mahavir Jayanti
     "2026-04-03", // Good Friday
     "2026-04-14", // Dr. Ambedkar Jayanti
     "2026-05-01", // Maharashtra Day
-    "2026-08-15", // Independence Day
+    "2026-05-28", // Bakri Id
+    "2026-06-26", // Muharram
+    "2026-09-14", // Ganesh Chaturthi
     "2026-10-02", // Gandhi Jayanti
-    "2026-11-09", // Diwali (indicative)
+    "2026-10-20", // Dussehra
+    "2026-11-10", // Diwali Balipratipada
     "2026-11-24", // Guru Nanak Jayanti
     "2026-12-25", // Christmas
   ],
@@ -59,6 +63,21 @@ export function nextTradingDays(from: Date, count: number): number[] {
     if (isTradingDay(cursor)) out.push(cursor.getTime())
   }
   return out
+}
+
+/**
+ * Is the NSE cash market open right now? Trading day, 09:15–15:30 IST (UTC+5:30).
+ * Computed from UTC so it is independent of the server's local timezone.
+ */
+export function isNseOpen(now = new Date()): boolean {
+  // Shift to IST and read the wall-clock there.
+  const ist = new Date(now.getTime() + 5.5 * 3600_000)
+  const istMidnight = new Date(
+    Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()),
+  )
+  if (!isTradingDay(istMidnight)) return false
+  const minutes = ist.getUTCHours() * 60 + ist.getUTCMinutes()
+  return minutes >= 9 * 60 + 15 && minutes <= 15 * 60 + 30
 }
 
 /** Calendar ISO date `days` trading days after `from`. */
