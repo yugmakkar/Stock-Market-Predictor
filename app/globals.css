@@ -1,132 +1,194 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 
+/*
+  Design tokens. Colors are drawn from the data-viz reference palette so the
+  charts, ink and status cues all validate for contrast. Surfaces are rendered
+  as translucent "liquid glass" over a deep plane; ink stays at full-strength
+  primary/secondary tokens so text on glass never drops below contrast.
+*/
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  color-scheme: light dark;
+
+  /* Plane + glass (light defaults) */
+  --plane: #eef1f6;
+  --plane-tint-a: rgba(42, 120, 214, 0.10);
+  --plane-tint-b: rgba(27, 175, 122, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(15, 20, 30, 0.10);
+  --glass-highlight: rgba(255, 255, 255, 0.70);
+  --glass-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.28);
+
+  /* Ink */
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6f6e69;
+  --grid: #dfe3ea;
+  --axis: #c3c2b7;
+
+  /* Series */
+  --series-price: #2a78d6;
+  --series-forecast: #d9641f;
+  --band-strong: rgba(217, 100, 31, 0.22);
+  --band-weak: rgba(217, 100, 31, 0.11);
+
+  /* Status */
+  --up: #0a8a2f;
+  --up-ink: #06702a;
+  --down: #c7342f;
+  --down-ink: #b42e2a;
+  --warn: #9a6a00;
+  --warn-bg: rgba(250, 178, 25, 0.16);
+  --warn-border: rgba(154, 106, 0, 0.35);
+
+  --radius: 20px;
+  --radius-sm: 13px;
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0a0b0d;
+    --plane-tint-a: rgba(57, 135, 229, 0.16);
+    --plane-tint-b: rgba(25, 158, 112, 0.10);
+    --glass-bg: rgba(255, 255, 255, 0.055);
+    --glass-bg-strong: rgba(255, 255, 255, 0.09);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-highlight: rgba(255, 255, 255, 0.16);
+    --glass-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.75);
+
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #8f8e88;
+    --grid: #26262a;
+    --axis: #383835;
+
+    --series-price: #4a93e8;
+    --series-forecast: #ef8a4a;
+    --band-strong: rgba(239, 138, 74, 0.26);
+    --band-weak: rgba(239, 138, 74, 0.12);
+
+    --up: #2eb54d;
+    --up-ink: #46c767;
+    --down: #e2605b;
+    --down-ink: #ec7a76;
+    --warn: #f4c04e;
+    --warn-bg: rgba(250, 178, 25, 0.12);
+    --warn-border: rgba(250, 178, 25, 0.30);
+  }
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+/* Explicit dark toggle wins over OS setting both ways. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0a0b0d;
+  --plane-tint-a: rgba(57, 135, 229, 0.16);
+  --plane-tint-b: rgba(25, 158, 112, 0.10);
+  --glass-bg: rgba(255, 255, 255, 0.055);
+  --glass-bg-strong: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.16);
+  --glass-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.75);
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #8f8e88;
+  --grid: #26262a;
+  --axis: #383835;
+  --series-price: #4a93e8;
+  --series-forecast: #ef8a4a;
+  --band-strong: rgba(239, 138, 74, 0.26);
+  --band-weak: rgba(239, 138, 74, 0.12);
+  --up: #2eb54d;
+  --up-ink: #46c767;
+  --down: #e2605b;
+  --down-ink: #ec7a76;
+  --warn: #f4c04e;
+  --warn-bg: rgba(250, 178, 25, 0.12);
+  --warn-border: rgba(250, 178, 25, 0.30);
 }
 
-@layer base {
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  color: var(--ink);
+  background-color: var(--plane);
+  background-image:
+    radial-gradient(60rem 60rem at 12% -10%, var(--plane-tint-a), transparent 60%),
+    radial-gradient(52rem 52rem at 108% 8%, var(--plane-tint-b), transparent 55%);
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+  font-feature-settings: "cv01", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.011em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--series-price) 32%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--series-price);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---- Liquid glass ------------------------------------------------------- */
+.glass {
+  position: relative;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow);
+  background-clip: padding-box;
+}
+.glass-strong {
+  background: var(--glass-bg-strong);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .glass,
+  .glass-strong {
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    backdrop-filter: blur(22px) saturate(160%);
+  }
+}
+/* Hairline top highlight — the tell of real glass. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, var(--glass-highlight), transparent 32%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.hairline {
+  border: 1px solid var(--glass-border);
+}
+
+/* Numeric figures align in tables and tickers. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@media (prefers-reduced-motion: reduce) {
   * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
-@layer utilities {
-  .text-shadow {
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  }
-
-  .glass {
-    backdrop-filter: blur(16px);
-    background: rgba(15, 23, 42, 0.8);
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
   }
 }
