@@ -1,0 +1,55 @@
+name: Bug report
+description: Report something that isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in the details
+        below so it can be reproduced quickly.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected instead.
+      placeholder: When I select RELIANCE the forecast chart stays blank...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the app
+        2. Select symbol '...'
+        3. See the error
+    validations:
+      required: true
+  - type: dropdown
+    id: data-mode
+    attributes:
+      label: Data mode
+      description: Which DATA_MODE was the app running in?
+      options:
+        - live (default)
+        - demo
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: symbol
+    attributes:
+      label: Affected symbol(s)
+      placeholder: RELIANCE.NS, TCS.NS
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, and whether this is local or a deployed host.
+      placeholder: Chrome 140 on macOS, deployed on Vercel
+  - type: textarea
+    id: console
+    attributes:
+      label: Console / server errors
+      description: Paste any relevant browser console or server log output.
+      render: shell

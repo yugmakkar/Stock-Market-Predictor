@@ -139,6 +139,17 @@ and exercised through unit tests and demo mode — **but not against the live en
 If Yahoo rate-limits your host, the in-memory TTL cache and the clear error state keep
 the app usable.
 
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup and
+the local check suite, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+To report a vulnerability, see the [Security Policy](SECURITY.md). Notable changes
+are tracked in the [Changelog](CHANGELOG.md).
+
+## License
+
+Released under the [MIT License](LICENSE).
+
 ---
 
 Not affiliated with the NSE, SEBI, or any listed company. Forecasts are probabilistic
